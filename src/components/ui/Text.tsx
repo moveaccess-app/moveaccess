@@ -63,7 +63,7 @@ const textVariants = cva("", {
       semibold: "font-semibold",
       bold: "font-bold",
     },
-    color: {
+    textColor: {
       default: "text-foreground",
       muted: "text-muted-foreground",
       primary: "text-primary",
@@ -73,33 +73,27 @@ const textVariants = cva("", {
   defaultVariants: {
     size: "base",
     weight: "normal",
-    color: "default",
+    textColor: "default",
   },
 });
 
 export interface TextProps
-  extends React.HTMLAttributes<HTMLParagraphElement>,
+  extends Omit<React.HTMLAttributes<HTMLElement>, "color">,
     VariantProps<typeof textVariants> {
   as?: "p" | "span" | "div" | "label";
 }
 
-const Text = React.forwardRef<
-  HTMLParagraphElement | HTMLSpanElement | HTMLDivElement | HTMLLabelElement,
-  TextProps
->(({ className, size, weight, color, as = "p", ...props }, ref) => {
-  const Component = as;
-  return (
-    <Component
-      className={cn(textVariants({ size, weight, color, className }))}
-      ref={
-        ref as React.Ref<
-          HTMLParagraphElement | HTMLSpanElement | HTMLDivElement | HTMLLabelElement
-        >
-      }
-      {...props}
-    />
-  );
-});
+const Text = React.forwardRef<HTMLElement, TextProps>(
+  ({ className, size, weight, textColor, as: Component = "p", ...props }, ref) => {
+    return (
+      <Component
+        className={cn(textVariants({ size, weight, textColor, className }))}
+        ref={ref as any}
+        {...props}
+      />
+    );
+  }
+);
 Text.displayName = "Text";
 
 export { Heading, headingVariants, Text, textVariants };

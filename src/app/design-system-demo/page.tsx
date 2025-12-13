@@ -34,7 +34,7 @@ export default function DesignSystemDemo() {
               </div>
               <div>
                 <Heading level="h6" className="mb-0">MoveAccess</Heading>
-                <Text size="xs" color="muted">Design System Demo</Text>
+                <Text size="xs" textColor="muted">Design System Demo</Text>
               </div>
             </div>
             <Badge variant="info">v1.0</Badge>
@@ -52,7 +52,7 @@ export default function DesignSystemDemo() {
             <Heading level="h1" gradient className="mb-6">
               MoveAccess Design System
             </Heading>
-            <Text size="lg" color="muted" className="max-w-2xl mx-auto mb-8">
+            <Text size="lg" textColor="muted" className="max-w-2xl mx-auto mb-8">
               Componentes base e tokens visuais consolidados da Landing Page.
               Esta página demonstra todos os componentes disponíveis.
             </Text>
@@ -154,9 +154,9 @@ export default function DesignSystemDemo() {
                 <Text weight="medium">Medium Weight</Text>
                 <Text weight="semibold">Semibold Weight</Text>
                 <Text weight="bold">Bold Weight</Text>
-                <Text color="default">Default Color</Text>
-                <Text color="muted">Muted Color</Text>
-                <Text color="primary">Primary Color</Text>
+                <Text textColor="default">Default Color</Text>
+                <Text textColor="muted">Muted Color</Text>
+                <Text textColor="primary">Primary Color</Text>
               </div>
             </div>
           </div>
@@ -179,7 +179,7 @@ export default function DesignSystemDemo() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Text color="muted">
+                <Text textColor="muted">
                   Conteúdo do card vai aqui. Pode incluir texto, botões, imagens, etc.
                 </Text>
               </CardContent>
@@ -193,7 +193,7 @@ export default function DesignSystemDemo() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Text color="muted">
+                <Text textColor="muted">
                   Adicione a classe .glass para o efeito de vidro fosco.
                 </Text>
               </CardContent>
@@ -207,7 +207,7 @@ export default function DesignSystemDemo() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Text color="muted">
+                <Text textColor="muted">
                   Use .shadow-glow para destaque especial.
                 </Text>
               </CardContent>
@@ -337,13 +337,13 @@ export default function DesignSystemDemo() {
               <Text weight="semibold" className="mb-4">Dividers</Text>
               <div className="space-y-4">
                 <div>
-                  <Text size="sm" color="muted" className="mb-2">Horizontal</Text>
+                  <Text size="sm" textColor="muted" className="mb-2">Horizontal</Text>
                   <Divider orientation="horizontal" />
                 </div>
                 <div className="flex items-center gap-4">
-                  <Text size="sm" color="muted">Vertical</Text>
+                  <Text size="sm" textColor="muted">Vertical</Text>
                   <Divider orientation="vertical" className="h-12" />
-                  <Text size="sm" color="muted">Between elements</Text>
+                  <Text size="sm" textColor="muted">Between elements</Text>
                 </div>
               </div>
             </div>
@@ -409,7 +409,7 @@ export default function DesignSystemDemo() {
         <Container padding="default" className="py-12">
           <div className="text-center space-y-4">
             <Heading level="h5">MoveAccess Design System</Heading>
-            <Text color="muted">
+            <Text textColor="muted">
               Consulte a documentação completa em <code className="text-primary">Doc/DesignSystem.md</code>
             </Text>
             <div className="flex gap-2 justify-center">

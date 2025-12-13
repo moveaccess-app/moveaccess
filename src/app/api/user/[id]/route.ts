@@ -9,10 +9,10 @@ setupDIContainer();
 
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = params.id;
+    const { id: userId } = await params;
 
     // Create request-scoped container and resolve controller
     const requestContainer = createRequestContainer();
