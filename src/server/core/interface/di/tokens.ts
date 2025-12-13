@@ -12,6 +12,7 @@ export const DI_TOKENS = {
 
   // Controllers
   UserController: Symbol.for('UserController'),
+  AuthController: Symbol.for('AuthController'),
 } as const;
 
 export type DIToken = typeof DI_TOKENS[keyof typeof DI_TOKENS];

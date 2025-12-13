@@ -7,7 +7,8 @@ import { z } from 'zod';
  * Schema para validação de User ID
  */
 export const userIdSchema = z.object({
-  userId: z.string().min(1, 'User ID is required').uuid('Invalid user ID format'),
+  // Removida a restrição de UUID para permitir identificadores flexíveis
+  userId: z.string().min(1, 'User ID is required'),
 });
 
 /**
