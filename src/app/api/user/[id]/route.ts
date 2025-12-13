@@ -1,7 +1,6 @@
 import 'reflect-metadata';
 import { NextResponse } from 'next/server';
-import { setupDIContainer } from '@/server/core/interface/di/container';
-import { container } from 'tsyringe';
+import { setupDIContainer, createRequestContainer } from '@/server/core/interface/di/container';
 import { DI_TOKENS } from '@/server/core/interface/di/tokens';
 import { UserController } from '@/server/core/interface/controllers/user-controller';
 
@@ -15,8 +14,9 @@ export async function GET(
   try {
     const userId = params.id;
 
-    // Resolve controller from DI
-    const controller = container.resolve<UserController>(DI_TOKENS.UserController);
+    // Create request-scoped container and resolve controller
+    const requestContainer = createRequestContainer();
+    const controller = requestContainer.resolve<UserController>(DI_TOKENS.UserController);
 
     const result = await controller.getUser({ userId });
 

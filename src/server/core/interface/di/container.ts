@@ -12,6 +12,8 @@ import { FetchHttpClient } from '@/server/core/infra/http/fetch-http-client';
 
 // Use Cases
 import { GetUserUseCase } from '@/server/core/application/use-cases/get-user';
+// Controllers
+import { UserController } from '@/server/core/interface/controllers/user-controller';
 
 /**
  * Configura o container global de DI
@@ -25,6 +27,9 @@ export function setupDIContainer(): void {
 
   // Register Use Cases
   container.register(DI_TOKENS.GetUserUseCase, { useClass: GetUserUseCase });
+
+  // Register Controllers
+  container.register(DI_TOKENS.UserController, { useClass: UserController });
 }
 
 /**
