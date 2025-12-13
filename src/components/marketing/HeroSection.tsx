@@ -3,6 +3,9 @@ import { ArrowRight, Play } from "lucide-react";
 import { Button } from "@/components/ui";
 import { landingContent } from "@/data/landingContent";
 
+// Chart data for dashboard preview mockup
+const CHART_VALUES = [40, 65, 45, 80, 55, 90, 70, 85, 60, 95, 75, 88];
+
 export function HeroSection() {
   const { hero } = landingContent;
 
@@ -146,15 +149,13 @@ export function HeroSection() {
 
                     {/* Chart placeholder */}
                     <div className="bg-secondary/20 rounded-lg p-4 h-32 flex items-end gap-1">
-                      {[40, 65, 45, 80, 55, 90, 70, 85, 60, 95, 75, 88].map(
-                        (h, i) => (
-                          <div
-                            key={i}
-                            className="flex-1 bg-primary/40 rounded-t"
-                            style={{ height: `${h}%` }}
-                          />
-                        )
-                      )}
+                      {CHART_VALUES.map((h, i) => (
+                        <div
+                          key={i}
+                          className="flex-1 bg-primary/40 rounded-t"
+                          style={{ height: `${h}%` }}
+                        />
+                      ))}
                     </div>
                   </div>
                 </div>

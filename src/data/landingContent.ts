@@ -259,7 +259,7 @@ export const landingContent = {
       { name: "YouTube", href: "#", icon: "Y" },
     ],
     bottom: {
-      copyright: `© ${new Date().getFullYear()} MoveAccess. Todos os direitos reservados.`,
+      copyright: "© 2025 MoveAccess. Todos os direitos reservados.",
       legalLinks: [
         { label: "Política de Privacidade", href: "#" },
         { label: "Termos de Serviço", href: "#" },
