@@ -88,6 +88,7 @@ const Text = React.forwardRef<HTMLElement, TextProps>(
     return (
       <Component
         className={cn(textVariants({ size, weight, textColor, className }))}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         ref={ref as any}
         {...props}
       />
