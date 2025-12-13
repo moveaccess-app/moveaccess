@@ -1,3 +1,8 @@
+/**
+ * Note: Inter font is loaded via CSS import for simplicity.
+ * For production, consider using next/font/google for better optimization.
+ * Currently acceptable as it uses display=swap for non-blocking rendering.
+ */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 

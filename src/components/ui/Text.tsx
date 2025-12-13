@@ -83,18 +83,23 @@ export interface TextProps
   as?: "p" | "span" | "div" | "label";
 }
 
-const Text = React.forwardRef<HTMLParagraphElement, TextProps>(
-  ({ className, size, weight, color, as = "p", ...props }, ref) => {
-    const Component = as;
-    return (
-      <Component
-        className={cn(textVariants({ size, weight, color, className }))}
-        ref={ref as React.Ref<HTMLParagraphElement>}
-        {...props}
-      />
-    );
-  }
-);
+const Text = React.forwardRef<
+  HTMLParagraphElement | HTMLSpanElement | HTMLDivElement | HTMLLabelElement,
+  TextProps
+>(({ className, size, weight, color, as = "p", ...props }, ref) => {
+  const Component = as;
+  return (
+    <Component
+      className={cn(textVariants({ size, weight, color, className }))}
+      ref={
+        ref as React.Ref<
+          HTMLParagraphElement | HTMLSpanElement | HTMLDivElement | HTMLLabelElement
+        >
+      }
+      {...props}
+    />
+  );
+});
 Text.displayName = "Text";
 
 export { Heading, headingVariants, Text, textVariants };
