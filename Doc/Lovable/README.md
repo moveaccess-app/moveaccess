@@ -115,4 +115,4 @@ cat Doc/Lovable/move-access-main/src/components/landing/HeroSection.tsx
 
 ---
 
-**Última atualização**: Dezembro 2025
+**Última atualização**: Dezembro 2024

@@ -381,4 +381,4 @@ src/
 
 **Nota**: Este mapeamento deve ser atualizado conforme a implementação avança e novas necessidades são identificadas.
 
-**Última atualização**: Dezembro 2025
+**Última atualização**: Dezembro 2024

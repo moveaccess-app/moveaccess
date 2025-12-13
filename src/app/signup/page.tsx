@@ -19,7 +19,7 @@ export default function SignupPage() {
             </h2>
             <ol className="ml-4 list-decimal space-y-1 text-sm text-zinc-600">
               <li>Dados da Conta (nome, email, senha)</li>
-              <li>Dados da Academia (nome, CNPJ, localização, tamanho)</li>
+              <li>Dados da Academia (nome, CNPJ, cidade, tamanho)</li>
               <li>Configurações Operacionais (catraca, QR code, biometria)</li>
               <li>Escolha do Plano (seleção de plano de assinatura)</li>
               <li>Conclusão e Próximos Passos</li>
