@@ -39,3 +39,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Lovable reference (do not include in builds)
+/Doc/Lovable/**/node_modules
+/Doc/Lovable/**/.next
+/Doc/Lovable/**/build
+/Doc/Lovable/**/dist
+/Doc/Lovable/**/out
