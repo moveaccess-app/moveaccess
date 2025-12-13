@@ -4,7 +4,7 @@
 import { injectable, inject } from 'tsyringe';
 import type { ILogger } from '@/server/core/application/ports/logger';
 import type { ICache } from '@/server/core/application/ports/cache';
-import { User, type UserProps } from '@/server/core/domain/entities/User';
+import { User } from '@/server/core/domain/entities/User';
 import { DI_TOKENS } from '@/server/core/interface/di/tokens';
 
 export interface GetUserInput {
@@ -12,7 +12,13 @@ export interface GetUserInput {
 }
 
 export interface GetUserOutput {
-  user: UserProps;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    createdAt: string;
+    updatedAt: string;
+  };
 }
 
 @injectable()
@@ -32,7 +38,7 @@ export class GetUserUseCase {
 
     // Tenta buscar do cache
     const cacheKey = `user:${input.userId}`;
-    const cachedUser = await this.cache.get<UserProps>(cacheKey);
+    const cachedUser = await this.cache.get<GetUserOutput['user']>(cacheKey);
 
     if (cachedUser) {
       this.logger.debug('User found in cache', { userId: input.userId });
