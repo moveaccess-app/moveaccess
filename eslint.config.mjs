@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Lovable reference (do not lint):
+    "Doc/Lovable/**",
   ]),
 ]);
 
