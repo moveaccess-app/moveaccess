@@ -77,3 +77,11 @@ git push
 - [Documentação Next.js](https://nextjs.org/docs)
 - [Tutorial Next.js](https://nextjs.org/learn)
 - [Deploy na Vercel](https://vercel.com/new)
+
+## 🤖 GitHub Copilot & Custom Agents
+
+Para informações sobre onde encontrar os custom agents do GitHub Copilot (como o "MoveAccess Feature Executor Agent"), consulte:
+
+📄 **[Doc/GITHUB_COPILOT_AGENTS.md](./Doc/GITHUB_COPILOT_AGENTS.md)**
+
+**TL;DR:** Custom agents do GitHub Copilot são armazenados nas configurações da sua conta/organização GitHub, não no repositório. Acesse: https://github.com/settings/copilot/agents
