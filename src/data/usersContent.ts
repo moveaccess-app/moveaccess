@@ -52,6 +52,13 @@ export const usersContent = {
     suspended: 'Suspenso',
   },
   
+  // Contract status labels
+  contractStatusLabels: {
+    active: 'Ativo',
+    expired: 'Expirado',
+    pending: 'Pendente',
+  },
+  
   // Empty states
   noUsersFound: 'Nenhum usuário encontrado',
   noUsersMessage: 'Não há usuários cadastrados no momento.',

@@ -227,7 +227,7 @@ export default async function UserDetailPage({ params }: Props) {
                         color: contractStatusColors[user.contract.status].text,
                       }}
                     >
-                      {user.contract.status === 'active' ? 'Ativo' : user.contract.status === 'expired' ? 'Expirado' : 'Pendente'}
+                      {usersContent.contractStatusLabels[user.contract.status]}
                     </span>
                   </div>
                 </div>
