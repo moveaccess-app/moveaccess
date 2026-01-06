@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { setupDIContainer, createRequestContainer } from '@/server/core/interface/di/container';
 import { DI_TOKENS } from '@/server/core/interface/di/tokens';
 import { UserController } from '@/server/core/interface/controllers/user-controller';
@@ -8,11 +8,11 @@ import { UserController } from '@/server/core/interface/controllers/user-control
 setupDIContainer();
 
 export async function GET(
-  _req: Request,
-  { params }: { params: { id: string } }
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = params.id;
+    const { id: userId } = await params;
 
     // Create request-scoped container and resolve controller
     const requestContainer = createRequestContainer();

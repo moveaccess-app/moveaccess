@@ -1,79 +1,109 @@
-# MoveAcess
+# MoveAccess
 
-Uma aplicação web Next.js com TypeScript, Tailwind CSS e ESLint.
+Aplicação web desenvolvida com Next.js, TypeScript, e Clean Architecture com Dependency Injection.
+
+## 🏗️ Arquitetura
+
+Este projeto segue os princípios de **Clean Architecture** com separação clara de responsabilidades em camadas:
+
+- **Domain** - Entidades e Value Objects (lógica de negócio pura)
+- **Application** - Use Cases e Ports (interfaces)
+- **Interface** - Controllers, DI e Validação
+- **Infrastructure** - Adaptadores e implementações concretas
+
+### Injeção de Dependências
+Utilizamos [tsyringe](https://github.com/microsoft/tsyringe) para gerenciar dependências de forma modular e testável.
 
 ## 🚀 Como Começar
 
-### Desenvolvimento
+### Pré-requisitos
+- Node.js 20+ 
+- npm
 
-Execute o servidor de desenvolvimento:
+### Instalação
 
 ```bash
+# Instalar dependências
+npm install
+```
+
+### Desenvolvimento
+
+```bash
+# Executar servidor de desenvolvimento
 npm run dev
 ```
 
-Abra [http://localhost:3000](http://localhost:3000) no seu navegador.
+Abra [http://localhost:3000](http://localhost:3000) no navegador.
 
 ### Build de Produção
 
 ```bash
+# Criar build otimizado
 npm run build
+
+# Executar build de produção
 npm start
 ```
 
 ### Linting
 
 ```bash
+# Verificar código com ESLint
 npm run lint
 ```
 
-## 🔗 Conectando ao GitHub
+## 📁 Estrutura do Projeto
 
-### 1. Inicializar Repositório Git Local
-
-```bash
-git init
-git add .
-git commit -m "Initial commit: Next.js project setup"
+```
+src/
+├── app/                      # Next.js App Router
+│   ├── api/                  # API Routes
+│   │   ├── auth/login/       # Autenticação
+│   │   └── user/[id]/        # Usuários
+│   ├── layout.tsx            # Layout raiz
+│   └── page.tsx              # Página inicial
+└── server/
+    └── core/
+        ├── domain/           # Entidades e Value Objects
+        ├── application/      # Use Cases e Ports
+        ├── interface/        # Controllers, DI, Validação
+        └── infra/            # Implementações (Cache, HTTP, Logging)
 ```
 
-### 2. Criar Repositório no GitHub
+## 🛠️ Tecnologias
 
-1. Acesse [github.com/new](https://github.com/new)
-2. Nome do repositório: `MoveAcess` (ou o nome que preferir)
-3. Deixe como **público** ou **privado**
-4. **NÃO** marque "Initialize this repository with a README"
-5. Clique em **Create repository**
+### Core
+- [Next.js 16](https://nextjs.org/) - React framework com App Router
+- [React 19](https://react.dev/) - UI library
+- [TypeScript 5](https://www.typescriptlang.org/) - Type safety
 
-### 3. Conectar Local ao GitHub
+### Arquitetura
+- [tsyringe](https://github.com/microsoft/tsyringe) - Dependency Injection
+- [Zod](https://zod.dev/) - Schema validation
+- [reflect-metadata](https://www.npmjs.com/package/reflect-metadata) - Metadata reflection
 
-Depois de criar o repositório no GitHub, copie a URL (algo como `https://github.com/seu-usuario/MoveAcess.git`) e execute:
-
-```bash
-git remote add origin https://github.com/seu-usuario/MoveAcess.git
-git branch -M main
-git push -u origin main
-```
-
-### 4. Próximos Commits
-
-Após a configuração inicial, para enviar alterações:
-
-```bash
-git add .
-git commit -m "Descrição das mudanças"
-git push
-```
-
-## 📚 Tecnologias
-
-- [Next.js 15](https://nextjs.org/) - React framework
-- [TypeScript](https://www.typescriptlang.org/) - Type safety
-- [Tailwind CSS](https://tailwindcss.com/) - Styling
+### Estilo
+- [Tailwind CSS 4](https://tailwindcss.com/) - Utility-first CSS
 - [ESLint](https://eslint.org/) - Code linting
 
-## 📖 Recursos
+## 📖 Documentação
+
+Para informações detalhadas sobre o projeto:
+
+- [Planos de Execução](./Doc/ExecutionPlans/) - Histórico de mudanças e melhorias
+
+## 📝 Scripts Disponíveis
+
+| Comando | Descrição |
+|---------|-----------|
+| `npm run dev` | Inicia servidor de desenvolvimento |
+| `npm run build` | Cria build de produção |
+| `npm start` | Executa build de produção |
+| `npm run lint` | Executa linter |
+
+## 🔗 Links Úteis
 
 - [Documentação Next.js](https://nextjs.org/docs)
-- [Tutorial Next.js](https://nextjs.org/learn)
-- [Deploy na Vercel](https://vercel.com/new)
+- [Documentação TypeScript](https://www.typescriptlang.org/docs)
+- [Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
