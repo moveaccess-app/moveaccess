@@ -1,4 +1,4 @@
-// Application Layer - HTTP Client Port (Interface)
+// Camada de Aplicação - Port de Cliente HTTP (Interface)
 // Define o contrato para clientes HTTP
 
 export interface HttpRequestConfig {

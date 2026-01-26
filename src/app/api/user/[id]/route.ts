@@ -4,17 +4,17 @@ import { setupDIContainer, createRequestContainer } from '@/server/core/interfac
 import { DI_TOKENS } from '@/server/core/interface/di/tokens';
 import { UserController } from '@/server/core/interface/controllers/user-controller';
 
-// Configure DI once at module load
+// Configura DI uma vez no carregamento do módulo
 setupDIContainer();
 
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const userId = params.id;
+    const { id: userId } = await params;
 
-    // Create request-scoped container and resolve controller
+    // Cria container com escopo de requisição e resolve o controller
     const requestContainer = createRequestContainer();
     const controller = requestContainer.resolve<UserController>(DI_TOKENS.UserController);
 
@@ -26,7 +26,7 @@ export async function GET(
 
     return NextResponse.json(result.data, { status: 200 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
+    const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

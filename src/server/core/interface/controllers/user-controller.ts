@@ -1,4 +1,4 @@
-// Interface Layer - User Controller
+// Camada de Interface - Controller de Usuário
 // Controllers recebem requisições, validam, executam use cases e retornam respostas
 
 import { injectable, inject } from 'tsyringe';
@@ -37,13 +37,13 @@ export class UserController {
         data: result.user,
       };
     } catch (error) {
-      this.logger.error('Error in UserController.getUser', error as Error, {
+      this.logger.error('Erro no UserController.getUser', error as Error, {
         userId: request.userId,
       });
 
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : 'Erro desconhecido',
       };
     }
   }

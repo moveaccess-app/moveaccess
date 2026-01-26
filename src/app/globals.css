@@ -1,26 +1,276 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ========================================
+   DESIGN SYSTEM - Tokens de Tema
+   Light Mode (padrão)
+   ======================================== */
+
+:root,
+.light,
+[data-theme="light"] {
+  /* Backgrounds */
+  --background-primary: #ffffff;
+  --background-secondary: #f8f9fa;
+  --background-tertiary: #f1f3f5;
+  
+  /* Elements / Text */
+  --element-primary: #212529;
+  --element-secondary: #6c757d;
+  --element-disabled: #adb5bd;
+  
+  /* Dividers / Borders */
+  --divider-primary: #dee2e6;
+  
+  /* Status Colors */
+  --status-positive: #28a745;
+  --status-positive-background: #d4edda;
+  --status-alert: #ffc107;
+  --status-alert-background: #fff3cd;
+  --status-negative: #dc3545;
+  --status-negative-background: #f8d7da;
+  --status-info: #17a2b8;
+  --status-info-background: #d1ecf1;
+  
+  /* Base */
+  --base-primary: #ffffff;
+  
+  /* Overlay / Modal */
+  --overlay-background: rgba(0, 0, 0, 0.5);
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+  
+  /* Focus Ring */
+  --focus-ring: var(--status-info);
+  --focus-ring-background: var(--status-info-background);
+  
+  /* Font */
+  --font-text: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* ========================================
+   DESIGN SYSTEM - Tokens de Tema
+   Dark Mode
+   ======================================== */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.dark,
+[data-theme="dark"] {
+  /* Backgrounds - Cores escuras neutras, não preto puro */
+  --background-primary: #1a1d21;
+  --background-secondary: #23272b;
+  --background-tertiary: #2d3238;
+  
+  /* Elements / Text - Tons claros para contraste */
+  --element-primary: #f8f9fa;
+  --element-secondary: #adb5bd;
+  --element-disabled: #6c757d;
+  
+  /* Dividers / Borders - Mais sutis no dark */
+  --divider-primary: #3d4349;
+  
+  /* Status Colors - Mesmas cores, backgrounds adaptados */
+  --status-positive: #34c759;
+  --status-positive-background: #1a3d26;
+  --status-alert: #ffc107;
+  --status-alert-background: #3d3517;
+  --status-negative: #ff453a;
+  --status-negative-background: #3d1f1f;
+  --status-info: #5ac8fa;
+  --status-info-background: #1a3340;
+  
+  /* Base - Card backgrounds */
+  --base-primary: #23272b;
+  
+  /* Overlay / Modal */
+  --overlay-background: rgba(0, 0, 0, 0.7);
+  
+  /* Shadows - Mais sutis no dark */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+  
+  /* Focus Ring */
+  --focus-ring: var(--status-info);
+  --focus-ring-background: var(--status-info-background);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--background-primary);
+  color: var(--element-primary);
+  font-family: var(--font-text);
+  margin: 0;
+  padding: 0;
+}
+
+/* ========================================
+   DESIGN SYSTEM - Estilos Globais de Interatividade
+   ======================================== */
+
+/* Cursor pointer padrão para todos os elementos clicáveis */
+a,
+button,
+[role="button"],
+input[type="submit"],
+input[type="button"],
+input[type="reset"],
+select,
+.clickable,
+.cursor-pointer {
+  cursor: pointer;
+}
+
+/* Links - Estilos padrão */
+a {
+  color: var(--status-info);
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+a:hover {
+  color: var(--element-primary);
+  text-decoration: underline;
+}
+
+/* Linhas de tabela clicáveis */
+tr.clickable,
+tr[data-clickable="true"],
+tbody tr:hover {
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+tbody tr:hover {
+  background-color: var(--background-secondary);
+}
+
+/* Ícones clicáveis */
+.icon-button,
+svg.clickable,
+[data-clickable="true"] {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.icon-button:hover,
+svg.clickable:hover {
+  opacity: 0.8;
+  transform: scale(1.1);
+}
+
+/* Cards clicáveis */
+.card-clickable,
+[data-card-clickable="true"] {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.card-clickable:hover,
+[data-card-clickable="true"]:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Badge clicável */
+.badge-clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.badge-clickable:hover {
+  opacity: 0.9;
+  transform: scale(1.05);
+}
+
+/* Select e inputs interativos */
+select,
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+textarea {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+select:hover,
+input[type="text"]:hover,
+input[type="email"]:hover,
+input[type="password"]:hover,
+input[type="search"]:hover,
+textarea:hover {
+  border-color: var(--element-secondary);
+}
+
+select:focus,
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="search"]:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--status-info);
+  box-shadow: 0 0 0 3px var(--status-info-background);
+}
+
+/* Desabilitar interatividade */
+.disabled,
+[disabled],
+:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ========================================
+   ANIMAÇÕES CUSTOMIZADAS
+   ======================================== */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out;
+}
+
+.animate-slide-up {
+  animation: slideUp 0.6s ease-out;
+}
+
+.animate-shake {
+  animation: shake 0.4s ease-in-out;
+}
+
+.animate-pulse {
+  animation: pulse 2s ease-in-out infinite;
 }

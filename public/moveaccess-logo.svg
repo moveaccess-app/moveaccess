@@ -1,0 +1,49 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background Circle with Gradient -->
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#17a2b8;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0d7a8a;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#20c997;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#17a2b8;stop-opacity:0.3" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Outer Circle -->
+  <circle cx="100" cy="100" r="95" fill="url(#grad1)"/>
+  
+  <!-- QR Code Elements (Stylized) -->
+  <!-- Top Left Corner -->
+  <rect x="50" y="50" width="30" height="30" rx="4" fill="white"/>
+  <rect x="56" y="56" width="18" height="18" rx="2" fill="url(#grad1)"/>
+  
+  <!-- Top Right Corner -->
+  <rect x="120" y="50" width="30" height="30" rx="4" fill="white"/>
+  <rect x="126" y="56" width="18" height="18" rx="2" fill="url(#grad1)"/>
+  
+  <!-- Bottom Left Corner -->
+  <rect x="50" y="120" width="30" height="30" rx="4" fill="white"/>
+  <rect x="56" y="126" width="18" height="18" rx="2" fill="url(#grad1)"/>
+  
+  <!-- Center M Letter (Stylized) -->
+  <path d="M 85 90 L 85 140 L 90 140 L 90 100 L 100 120 L 110 100 L 110 140 L 115 140 L 115 90 L 107 90 L 100 110 L 93 90 Z" fill="white" stroke="white" stroke-width="1"/>
+  
+  <!-- Decorative Elements (QR-style dots) -->
+  <circle cx="125" cy="95" r="3" fill="white" opacity="0.9"/>
+  <circle cx="135" cy="95" r="3" fill="white" opacity="0.9"/>
+  <circle cx="145" cy="95" r="3" fill="white" opacity="0.9"/>
+  
+  <circle cx="125" cy="105" r="3" fill="white" opacity="0.7"/>
+  <circle cx="145" cy="105" r="3" fill="white" opacity="0.7"/>
+  
+  <circle cx="125" cy="125" r="3" fill="white" opacity="0.8"/>
+  <circle cx="135" cy="125" r="3" fill="white" opacity="0.8"/>
+  <circle cx="145" cy="125" r="3" fill="white" opacity="0.8"/>
+  <circle cx="125" cy="135" r="3" fill="white" opacity="0.8"/>
+  <circle cx="145" cy="135" r="3" fill="white" opacity="0.8"/>
+  <circle cx="125" cy="145" r="3" fill="white" opacity="0.8"/>
+  <circle cx="135" cy="145" r="3" fill="white" opacity="0.8"/>
+  <circle cx="145" cy="145" r="3" fill="white" opacity="0.8"/>
+</svg>

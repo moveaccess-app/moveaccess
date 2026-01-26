@@ -1,4 +1,4 @@
-// Interface Layer - Dependency Injection Tokens
+// Camada de Interface - Tokens de Injeção de Dependência
 // Define símbolos únicos para injeção de dependências com tsyringe
 
 export const DI_TOKENS = {

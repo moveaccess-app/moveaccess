@@ -1,30 +1,30 @@
-// Interface Layer - Validation Schemas (Zod)
+// Camada de Interface - Schemas de Validação (Zod)
 // Define schemas de validação para entrada de dados
 
 import { z } from 'zod';
 
 /**
- * Schema para validação de User ID
+ * Schema para validação de ID de Usuário
  */
 export const userIdSchema = z.object({
   // Removida a restrição de UUID para permitir identificadores flexíveis
-  userId: z.string().min(1, 'User ID is required'),
+  userId: z.string().min(1, 'ID do usuário é obrigatório'),
 });
 
 /**
  * Schema para criação de usuário
  */
 export const createUserSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(100, 'Name too long'),
-  email: z.string().email('Invalid email format'),
+  name: z.string().min(1, 'Nome é obrigatório').max(100, 'Nome muito longo'),
+  email: z.string().email('Formato de email inválido'),
 });
 
 /**
  * Schema para atualização de usuário
  */
 export const updateUserSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(100, 'Name too long').optional(),
-  email: z.string().email('Invalid email format').optional(),
+  name: z.string().min(1, 'Nome é obrigatório').max(100, 'Nome muito longo').optional(),
+  email: z.string().email('Formato de email inválido').optional(),
 });
 
 /**
@@ -35,8 +35,8 @@ export function validateSchema<T>(schema: z.ZodSchema<T>, data: unknown): T {
     return schema.parse(data);
   } catch (error) {
     if (error instanceof z.ZodError) {
-      const messages = error.errors.map((e) => `${e.path.join('.')}: ${e.message}`).join(', ');
-      throw new Error(`Validation failed: ${messages}`);
+      const messages = error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join(', ');
+      throw new Error(`Validação falhou: ${messages}`);
     }
     throw error;
   }

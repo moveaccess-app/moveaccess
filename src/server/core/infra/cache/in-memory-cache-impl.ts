@@ -1,4 +1,4 @@
-// Infrastructure Layer - In-Memory Cache Implementation
+// Camada de Infraestrutura - Implementação de Cache em Memória
 // Implementação concreta do port ICache usando Map
 
 import { singleton } from 'tsyringe';
