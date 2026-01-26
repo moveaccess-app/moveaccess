@@ -1,4 +1,4 @@
-// Domain Layer - User Entity
+// Camada de Domínio - Entidade Usuário
 // Representa um usuário do sistema com suas propriedades e regras de negócio
 
 export interface UserProps {
@@ -20,15 +20,15 @@ export class User {
 
   private validate(): void {
     if (!this.props.id || this.props.id.trim() === '') {
-      throw new Error('User ID is required');
+      throw new Error('ID do usuário é obrigatório');
     }
     
     if (!this.props.name || this.props.name.trim() === '') {
-      throw new Error('User name is required');
+      throw new Error('Nome do usuário é obrigatório');
     }
 
     if (!this.props.email || !this.isValidEmail(this.props.email)) {
-      throw new Error('Valid email is required');
+      throw new Error('Email válido é obrigatório');
     }
   }
 
@@ -58,10 +58,10 @@ export class User {
     return this.props.updatedAt;
   }
 
-  // Business methods
+  // Métodos de negócio
   updateName(newName: string): User {
     if (!newName || newName.trim() === '') {
-      throw new Error('Name cannot be empty');
+      throw new Error('Nome não pode estar vazio');
     }
     
     return User.create({
@@ -73,7 +73,7 @@ export class User {
 
   updateEmail(newEmail: string): User {
     if (!newEmail || !this.isValidEmail(newEmail)) {
-      throw new Error('Valid email is required');
+      throw new Error('Email válido é obrigatório');
     }
 
     return User.create({

@@ -1,4 +1,4 @@
-// Infrastructure Layer - Logger Implementation
+// Camada de Infraestrutura - Implementação de Logger
 // Implementação concreta do port ILogger usando console
 
 import { singleton } from 'tsyringe';

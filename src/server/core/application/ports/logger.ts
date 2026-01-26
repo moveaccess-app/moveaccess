@@ -1,4 +1,4 @@
-// Application Layer - Logger Port (Interface)
+// Camada de Aplicação - Port de Logger (Interface)
 // Define o contrato para serviços de logging
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';

@@ -1,0 +1,11 @@
+<svg width="120" height="32" viewBox="0 0 120 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- M Letter Icon -->
+  <rect width="32" height="32" rx="8" fill="currentColor" opacity="0.1"/>
+  <path d="M 10 10 L 10 24 L 12.5 24 L 12.5 13.5 L 16 20 L 19.5 13.5 L 19.5 24 L 22 24 L 22 10 L 19 10 L 16 17.5 L 13 10 Z" fill="currentColor"/>
+  
+  <!-- Text: Move -->
+  <text x="38" y="23" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="700" fill="currentColor">Move</text>
+  
+  <!-- Text: Access (lighter) -->
+  <text x="75" y="23" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="500" fill="currentColor" opacity="0.7">Access</text>
+</svg>

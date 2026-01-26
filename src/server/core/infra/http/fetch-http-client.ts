@@ -1,4 +1,4 @@
-// Infrastructure Layer - Fetch HTTP Client Implementation
+// Camada de Infraestrutura - Implementação de Cliente HTTP com Fetch
 // Implementação concreta do port IHttpClient usando fetch API
 
 import { singleton } from 'tsyringe';

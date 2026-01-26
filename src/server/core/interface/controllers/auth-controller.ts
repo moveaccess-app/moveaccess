@@ -27,12 +27,12 @@ export class AuthController {
       // Aqui você faria a autenticação real (DB/serviço externo)
       // Mock simples: aceita qualquer senha com 8+ chars
       if (password.length < 8) {
-        throw new Error('Invalid credentials');
+        throw new Error('Credenciais inválidas');
       }
 
       const accessToken = `mock-token-${Buffer.from(email).toString('hex')}`;
 
-      this.logger.info('User logged in', { email });
+      this.logger.info('Usuário logado', { email });
 
       return {
         success: true,
@@ -44,10 +44,10 @@ export class AuthController {
         },
       };
     } catch (error) {
-      this.logger.warn('Login failed', { error: error instanceof Error ? error.message : String(error) });
+      this.logger.warn('Login falhou', { error: error instanceof Error ? error.message : String(error) });
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : 'Erro desconhecido',
       };
     }
   }

@@ -1,4 +1,4 @@
-// Application Layer - Cache Port (Interface)
+// Camada de Aplicação - Port de Cache (Interface)
 // Define o contrato para serviços de cache
 // Implementações concretas ficam na camada de infraestrutura
 

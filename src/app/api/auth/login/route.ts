@@ -10,7 +10,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
 
-    // Request-scoped container
+    // Container com escopo de requisição
     const requestContainer = createRequestContainer();
     const controller = requestContainer.resolve<AuthController>(DI_TOKENS.AuthController);
 
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(result.data, { status: 200 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
+    const message = error instanceof Error ? error.message : 'Erro desconhecido';
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

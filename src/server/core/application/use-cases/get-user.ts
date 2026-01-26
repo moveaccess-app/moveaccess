@@ -1,4 +1,4 @@
-// Application Layer - Example Use Case
+// Camada de Aplicação - Exemplo de Use Case
 // Use cases orquestram a lógica de negócio e coordenam entre ports
 
 import { injectable, inject } from 'tsyringe';
@@ -29,11 +29,11 @@ export class GetUserUseCase {
   ) {}
 
   async execute(input: GetUserInput): Promise<GetUserOutput> {
-    this.logger.info('GetUserUseCase started', { userId: input.userId });
+    this.logger.info('GetUserUseCase iniciado', { userId: input.userId });
 
     // Validação de entrada
     if (!input.userId) {
-      throw new Error('User ID is required');
+      throw new Error('ID do usuário é obrigatório');
     }
 
     // Tenta buscar do cache
@@ -41,7 +41,7 @@ export class GetUserUseCase {
     const cachedUser = await this.cache.get<GetUserOutput['user']>(cacheKey);
 
     if (cachedUser) {
-      this.logger.debug('User found in cache', { userId: input.userId });
+      this.logger.debug('Usuário encontrado no cache', { userId: input.userId });
       return { user: cachedUser };
     }
 
@@ -49,8 +49,8 @@ export class GetUserUseCase {
     // Por enquanto, exemplo mockado
     const user = User.create({
       id: input.userId,
-      name: 'Example User',
-      email: 'user@example.com',
+      name: 'Usuário Exemplo',
+      email: 'usuario@exemplo.com',
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -58,7 +58,7 @@ export class GetUserUseCase {
     // Salva no cache
     await this.cache.set(cacheKey, user.toJSON(), 3600); // 1 hora
 
-    this.logger.info('GetUserUseCase completed', { userId: input.userId });
+    this.logger.info('GetUserUseCase finalizado', { userId: input.userId });
 
     return { user: user.toJSON() };
   }

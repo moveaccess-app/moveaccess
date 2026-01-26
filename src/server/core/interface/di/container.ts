@@ -1,4 +1,4 @@
-// Interface Layer - DI Container Configuration
+// Camada de Interface - Configuração do Container de DI
 // Configura o container de injeção de dependências (tsyringe)
 
 import 'reflect-metadata';
@@ -21,15 +21,15 @@ import { AuthController } from '@/server/core/interface/controllers/auth-control
  * Deve ser chamado uma vez no início da aplicação
  */
 export function setupDIContainer(): void {
-  // Register Infrastructure implementations
+  // Registra implementações de Infraestrutura
   container.register(DI_TOKENS.ILogger, { useClass: LoggerImpl });
   container.register(DI_TOKENS.ICache, { useClass: InMemoryCacheImpl });
   container.register(DI_TOKENS.IHttpClient, { useClass: FetchHttpClient });
 
-  // Register Use Cases
+  // Registra Use Cases
   container.register(DI_TOKENS.GetUserUseCase, { useClass: GetUserUseCase });
 
-  // Register Controllers
+  // Registra Controllers
   container.register(DI_TOKENS.UserController, { useClass: UserController });
   container.register(DI_TOKENS.AuthController, { useClass: AuthController });
 }
