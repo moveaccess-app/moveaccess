@@ -35,6 +35,16 @@ export default function StudentDashboardPage() {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: 'var(--background-secondary)' }}>
+      {/* Botão de Logout Fixo - sempre visível */}
+      <button
+        onClick={logout}
+        className="fixed top-4 right-4 z-50 px-4 py-2 rounded-lg font-semibold text-white shadow-lg flex items-center gap-2"
+        style={{ backgroundColor: '#ef4444' }}
+      >
+        <LogOut className="w-4 h-4" />
+        Sair
+      </button>
+
       {/* Header com gradiente */}
       <header className="relative overflow-hidden">
         <div 

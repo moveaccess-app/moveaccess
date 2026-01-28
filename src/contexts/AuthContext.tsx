@@ -3,32 +3,26 @@
 /**
  * Contexto de Autenticação
  * Gerencia estado de autenticação globalmente
- * Integrado com Supabase Auth
+ * Usa abstração authService que alterna entre Mock e Supabase
  */
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
-import type { User, Session } from '@supabase/supabase-js';
-import type { MyProfile } from '@/lib/supabase';
+import * as authService from '@/lib/auth/authService';
+import type { AuthUser, AuthSession, LoginResult, UserType } from '@/lib/auth/authService';
+
+// Re-exportar tipos
+export type { UserType, LoginResult };
 
 // ============================================
 // TIPOS
 // ============================================
 
-export type UserType = 'staff' | 'student' | null;
-
-export interface LoginResult {
-  success: boolean;
-  error?: string;
-}
-
 interface AuthContextType {
   // Estado
-  user: User | null;
-  profile: MyProfile | null;
-  session: Session | null;
-  userType: UserType;
+  user: AuthUser | null;
+  session: AuthSession | null;
+  userType: UserType | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   isStaff: boolean;
@@ -57,220 +51,95 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<MyProfile | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  const supabase = createClient();
-
-  // Buscar perfil completo do usuário
-  const fetchProfile = useCallback(async (userId: string) => {
-    const { data, error } = await supabase
-      .from('my_profile')
-      .select('*')
-      .eq('id', userId)
-      .single();
-
-    if (!error && data) {
-      setProfile(data);
-    }
-    return data;
-  }, [supabase]);
 
   // Inicializar estado de autenticação
   const refreshSession = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      
+      const currentSession = await authService.getCurrentSession();
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
-      
-      if (currentSession?.user) {
-        await fetchProfile(currentSession.user.id);
-      } else {
-        setProfile(null);
-      }
     } finally {
       setIsLoading(false);
     }
-  }, [supabase, fetchProfile]);
+  }, []);
 
   // Carregar sessão no mount e escutar mudanças
   useEffect(() => {
     refreshSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
+    const unsubscribe = authService.onAuthStateChange((newSession) => {
+      setSession(newSession);
+      setUser(newSession?.user ?? null);
 
-        if (newSession?.user) {
-          await fetchProfile(newSession.user.id);
-        } else {
-          setProfile(null);
-        }
-
-        if (event === 'SIGNED_OUT') {
-          router.push('/login');
-        }
+      if (!newSession) {
+        router.push('/login');
       }
-    );
+    });
 
-    return () => subscription.unsubscribe();
-  }, [supabase, fetchProfile, refreshSession, router]);
+    return () => unsubscribe();
+  }, [refreshSession, router]);
 
   // Login da equipe
   const loginAsStaff = useCallback(async (email: string, password: string): Promise<LoginResult> => {
     setIsLoading(true);
     
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const result = await authService.loginStaff(email, password);
 
-      if (error) {
-        return { success: false, error: error.message };
+      if (result.success && result.session) {
+        setSession(result.session);
+        setUser(result.session.user);
       }
 
-      if (!data.user) {
-        return { success: false, error: 'Usuário não encontrado' };
-      }
-
-      // Buscar perfil
-      const profileData = await fetchProfile(data.user.id);
-      
-      if (!profileData) {
-        await supabase.auth.signOut();
-        return { success: false, error: 'Perfil não encontrado. Complete seu cadastro.' };
-      }
-
-      // Verificar se é staff
-      if (profileData.user_type !== 'staff') {
-        await supabase.auth.signOut();
-        return { success: false, error: 'Acesso negado. Use o login de aluno.' };
-      }
-
-      // Verificar status
-      if (profileData.staff_status !== 'active') {
-        await supabase.auth.signOut();
-        return { success: false, error: 'Conta inativa ou pendente de aprovação.' };
-      }
-
-      // Atualizar last_login
-      await supabase
-        .from('staff_profiles')
-        .update({ last_login_at: new Date().toISOString() })
-        .eq('id', data.user.id);
-
-      setSession(data.session);
-      setUser(data.user);
-      
-      return { success: true };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro desconhecido';
-      return { success: false, error: message };
+      return result;
     } finally {
       setIsLoading(false);
     }
-  }, [supabase, fetchProfile]);
+  }, []);
 
   // Login do aluno
   const loginAsStudent = useCallback(async (identifier: string, password: string): Promise<LoginResult> => {
     setIsLoading(true);
     
     try {
-      // Para alunos, tentamos primeiro como email
-      // Se não tiver @, tratamos como CPF e buscamos o email correspondente
-      let email = identifier;
-      
-      if (!identifier.includes('@')) {
-        // Buscar usuário por CPF
-        const cpfClean = identifier.replace(/\D/g, '');
-        const { data: profileByCpf, error: cpfError } = await supabase
-          .from('profiles')
-          .select('email')
-          .eq('cpf', cpfClean)
-          .limit(1)
-          .maybeSingle();
+      const result = await authService.loginStudent(identifier, password);
 
-        if (cpfError || !profileByCpf?.email) {
-          return { success: false, error: 'CPF não encontrado' };
-        }
-
-        email = profileByCpf.email;
+      if (result.success && result.session) {
+        setSession(result.session);
+        setUser(result.session.user);
       }
 
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        return { success: false, error: error.message };
-      }
-
-      if (!data.user) {
-        return { success: false, error: 'Usuário não encontrado' };
-      }
-
-      // Buscar perfil
-      const profileData = await fetchProfile(data.user.id);
-      
-      if (!profileData) {
-        await supabase.auth.signOut();
-        return { success: false, error: 'Perfil não encontrado' };
-      }
-
-      // Verificar se é student
-      if (profileData.user_type !== 'student') {
-        await supabase.auth.signOut();
-        return { success: false, error: 'Acesso negado. Use o login da equipe.' };
-      }
-
-      // Verificar status
-      if (profileData.student_status === 'blocked') {
-        await supabase.auth.signOut();
-        return { success: false, error: 'Conta bloqueada. Entre em contato com a academia.' };
-      }
-
-      setSession(data.session);
-      setUser(data.user);
-      
-      return { success: true };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Erro desconhecido';
-      return { success: false, error: message };
+      return result;
     } finally {
       setIsLoading(false);
     }
-  }, [supabase, fetchProfile]);
+  }, []);
 
   // Logout
   const logout = useCallback(async () => {
-    const wasStaff = profile?.user_type === 'staff';
+    const wasStaff = user?.user_type === 'staff';
     
-    await supabase.auth.signOut();
+    await authService.logout();
     
     setSession(null);
     setUser(null);
-    setProfile(null);
     
     // Redirecionar baseado no tipo de usuário anterior
     router.push(wasStaff ? '/login' : '/aluno/login');
-  }, [supabase, profile, router]);
+  }, [user, router]);
 
   // Valores computados
-  const userType: UserType = profile?.user_type ?? null;
+  const userType: UserType | null = user?.user_type ?? null;
   const isAuthenticated = !!session && !!user;
-  const isStaff = isAuthenticated && profile?.user_type === 'staff';
-  const isStudent = isAuthenticated && profile?.user_type === 'student';
+  const isStaff = isAuthenticated && user?.user_type === 'staff';
+  const isStudent = isAuthenticated && user?.user_type === 'student';
 
   const value: AuthContextType = {
     user,
-    profile,
     session,
     userType,
     isLoading,
