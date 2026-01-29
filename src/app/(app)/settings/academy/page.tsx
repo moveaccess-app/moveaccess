@@ -1,13 +1,15 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Header } from '@/components/common/Header';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
-import { getAcademy, updateAcademy, type Academy } from '@/mocks/settingsMock';
+import { getAcademy, updateAcademy, type Academy } from '@/lib/settings';
+import { getCurrentSession } from '@/lib/auth/authService';
 
 // Máscaras simples
 function formatCNPJ(value: string): string {
@@ -35,16 +37,60 @@ function formatCEP(value: string): string {
     .slice(0, 9);
 }
 
+const emptyAcademy: Academy = {
+  id: '',
+  tradeName: '',
+  legalName: '',
+  cnpj: '',
+  email: '',
+  phone: '',
+  address: { street: '', number: '', neighborhood: '', city: '', state: '', zipCode: '' },
+  preferences: { language: 'pt-BR', timezone: 'America/Sao_Paulo', currency: 'BRL', dateFormat: 'DD/MM/YYYY' },
+  status: 'active',
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
 export default function AcademyPage() {
-  const originalAcademy = useMemo(() => getAcademy(), []);
-  const [formData, setFormData] = useState<Academy>(originalAcademy);
+  const router = useRouter();
+  const [formData, setFormData] = useState<Academy>(emptyAcademy);
+  const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    async function loadAcademy() {
+      try {
+        const data = await getAcademy();
+        if (data) {
+          // Garantir que address e preferences tenham valores padrão
+          setFormData({
+            ...emptyAcademy,
+            ...data,
+            address: {
+              ...emptyAcademy.address,
+              ...(data.address || {}),
+            },
+            preferences: {
+              ...emptyAcademy.preferences,
+              ...(data.preferences || {}),
+            },
+          });
+        }
+      } catch (err) {
+        console.error('[AcademyPage] Erro ao carregar:', err);
+        setErrorMessage('Erro ao carregar dados da academia');
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadAcademy();
+  }, []);
 
   const handleChange = (field: string, value: string) => {
     setHasChanges(true);
-    setSuccessMessage('');
+    setErrorMessage('');
 
     if (field.includes('.')) {
       const [parent, child] = field.split('.');
@@ -63,13 +109,45 @@ export default function AcademyPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    updateAcademy(formData, 'staff_001');
-    setIsSaving(false);
-    setHasChanges(false);
-    setSuccessMessage('Dados salvos!');
-    setTimeout(() => setSuccessMessage(''), 3000);
+    setErrorMessage('');
+    
+    try {
+      // Obter userId da sessão atual
+      const session = await getCurrentSession();
+      const userId = session?.user?.id;
+      
+      if (!userId) {
+        setErrorMessage('Sessão expirada. Faça login novamente.');
+        setIsSaving(false);
+        return;
+      }
+
+      const result = await updateAcademy(formData, userId);
+      if (result.success) {
+        setHasChanges(false);
+        // Redireciona para settings após salvar
+        setTimeout(() => router.push('/settings'), 500);
+      } else {
+        setErrorMessage(result.error || 'Não foi possível salvar os dados. Tente novamente.');
+      }
+    } catch (err) {
+      console.error('[AcademyPage] Erro ao salvar:', err);
+      setErrorMessage('Ocorreu um erro ao salvar. Tente novamente.');
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col h-full bg-[var(--background-secondary)]">
+        <Header title="Dados da Academia" />
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-[var(--element-secondary)]">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-[var(--background-secondary)]">
@@ -87,9 +165,9 @@ export default function AcademyPage() {
           </div>
 
           {/* Feedback */}
-          {successMessage && (
-            <div className="p-3 rounded-lg bg-[var(--status-positive-background)] text-[var(--status-positive)] text-sm">
-              {successMessage}
+          {errorMessage && (
+            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+              {errorMessage}
             </div>
           )}
 

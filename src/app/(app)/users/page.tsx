@@ -1,17 +1,15 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/common/Header';
 import { Input, Select, Button, Card } from '@/components/ui';
 import { usersContent } from '@/data/usersContent';
 import { 
-  mockUsers, 
-  filterUsersByStatus, 
-  searchUsers, 
+  searchAndFilterUsers,
   type UserStatus, 
   type User,
-} from '@/mocks/usersMock';
+} from '@/lib/users';
 import { InviteGenerator } from '@/components/onboarding/InviteGenerator';
 
 const ITEMS_PER_PAGE = 20;
@@ -168,32 +166,37 @@ export default function UsersPage() {
   const [visibleCount, setVisibleCount] = useState(ITEMS_PER_PAGE);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const observerTarget = useRef<HTMLDivElement>(null);
+  
+  // Estado para dados assíncronos
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filteredUsers = useMemo(() => {
-    let users = mockUsers;
-    
-    if (statusFilter !== 'all') {
-      users = filterUsersByStatus(users, statusFilter);
+  // Carregar usuários do service
+  const loadUsers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await searchAndFilterUsers(searchQuery, statusFilter);
+      setUsers(result.users);
+    } catch (error) {
+      console.error('Erro ao carregar usuários:', error);
+      setUsers([]);
+    } finally {
+      setLoading(false);
     }
-    
-    if (searchQuery) {
-      users = searchUsers(users, searchQuery);
-    }
-    
-    return users;
   }, [searchQuery, statusFilter]);
 
-  // Resetar contagem ao mudar filtros
+  // Recarregar quando filtros mudarem
   useEffect(() => {
+    loadUsers();
     setVisibleCount(ITEMS_PER_PAGE);
-  }, [searchQuery, statusFilter]);
+  }, [loadUsers]);
 
   // Scroll infinito com Intersection Observer
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && visibleCount < filteredUsers.length) {
-          setVisibleCount((prev) => Math.min(prev + ITEMS_PER_PAGE, filteredUsers.length));
+        if (entries[0].isIntersecting && visibleCount < users.length) {
+          setVisibleCount((prev) => Math.min(prev + ITEMS_PER_PAGE, users.length));
         }
       },
       { threshold: 0.1 }
@@ -209,17 +212,15 @@ export default function UsersPage() {
         observer.unobserve(currentTarget);
       }
     };
-  }, [visibleCount, filteredUsers.length]);
+  }, [visibleCount, users.length]);
 
-  const visibleUsers = useMemo(() => {
-    return filteredUsers.slice(0, visibleCount);
-  }, [filteredUsers, visibleCount]);
+  const visibleUsers = users.slice(0, visibleCount);
 
   const handleUserClick = (userId: string) => {
     router.push(`/users/${userId}`);
   };
 
-  const hasMore = visibleCount < filteredUsers.length;
+  const hasMore = visibleCount < users.length;
 
   return (
     <div>
@@ -265,7 +266,7 @@ export default function UsersPage() {
 
         {/* Contador simples */}
         <p className="mb-3 text-sm" style={{ color: 'var(--element-secondary)' }}>
-          Mostrando {visibleUsers.length} de {filteredUsers.length} {filteredUsers.length === 1 ? 'usuário' : 'usuários'}
+          {loading ? 'Carregando...' : `Mostrando ${visibleUsers.length} de ${users.length} ${users.length === 1 ? 'usuário' : 'usuários'}`}
         </p>
 
         {/* Tabela */}

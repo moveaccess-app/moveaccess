@@ -1,13 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Header } from '@/components/common/Header';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { getUnits, deleteUnit, type Unit, type UnitStatus } from '@/mocks/settingsMock';
+import { getUnits, deleteUnit, type Unit, type UnitStatus } from '@/lib/settings';
 
 const STATUS_LABELS: Record<UnitStatus, { label: string; variant: 'success' | 'default' | 'warning' }> = {
   active: { label: 'Ativa', variant: 'success' },
@@ -16,8 +16,11 @@ const STATUS_LABELS: Record<UnitStatus, { label: string; variant: 'success' | 'd
 };
 
 function UnitCard({ unit, onEdit, onDelete }: { unit: Unit; onEdit: () => void; onDelete: () => void }) {
-  const statusInfo = STATUS_LABELS[unit.status];
-  const todayHours = unit.operatingHours.find((h) => h.dayOfWeek === new Date().getDay());
+  const statusInfo = STATUS_LABELS[unit.status] || STATUS_LABELS.active;
+  const todayHours = unit.operatingHours?.find((h) => h.dayOfWeek === new Date().getDay());
+  const neighborhood = unit.address?.neighborhood || '';
+  const city = unit.address?.city || '';
+  const locationText = [neighborhood, city].filter(Boolean).join(', ') || 'Endereço não informado';
 
   return (
     <Card className="p-4">
@@ -37,7 +40,7 @@ function UnitCard({ unit, onEdit, onDelete }: { unit: Unit; onEdit: () => void; 
             <Badge variant={statusInfo.variant} className="text-xs">{statusInfo.label}</Badge>
           </div>
           <p className="text-sm text-[var(--element-secondary)] truncate">
-            {unit.address.neighborhood}, {unit.address.city}
+            {locationText}
           </p>
           <p className="text-xs text-[var(--element-disabled)] mt-1">
             {todayHours?.isOpen ? `Hoje: ${todayHours.openTime} - ${todayHours.closeTime}` : 'Fechado hoje'}
@@ -67,12 +70,36 @@ function UnitCard({ unit, onEdit, onDelete }: { unit: Unit; onEdit: () => void; 
 
 export default function UnitsPage() {
   const router = useRouter();
-  const [units, setUnits] = useState(() => getUnits());
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleDelete = (id: string) => {
+  const loadUnits = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getUnits();
+      setUnits(data);
+    } catch (err) {
+      console.error('[UnitsPage] Erro ao carregar unidades:', err);
+      setError('Erro ao carregar unidades');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadUnits();
+  }, []);
+
+  const handleDelete = async (id: string) => {
     if (confirm('Deseja remover esta unidade?')) {
-      deleteUnit(id, 'staff_001');
-      setUnits(getUnits());
+      const result = await deleteUnit(id);
+      if (result.success) {
+        loadUnits(); // Recarrega a lista
+      } else {
+        alert('Erro ao remover unidade');
+      }
     }
   };
 
@@ -91,35 +118,51 @@ export default function UnitsPage() {
             <span className="text-[var(--element-primary)]">Unidades</span>
           </div>
 
-          {/* Header */}
-          <div className="flex items-center justify-between gap-4">
-            <p className="text-sm text-[var(--element-secondary)]">
-              {units.length} unidade{units.length !== 1 ? 's' : ''} cadastrada{units.length !== 1 ? 's' : ''}
-            </p>
-            <Button onClick={() => router.push('/settings/units/new')}>
-              Nova Unidade
-            </Button>
-          </div>
+          {/* Error */}
+          {error && (
+            <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700">
+              {error}
+            </div>
+          )}
 
-          {/* Lista */}
-          <div className="space-y-3">
-            {units.map((unit) => (
-              <UnitCard
-                key={unit.id}
-                unit={unit}
-                onEdit={() => router.push(`/settings/units/${unit.id}`)}
-                onDelete={() => handleDelete(unit.id)}
-              />
-            ))}
-          </div>
-
-          {units.length === 0 && (
+          {/* Loading */}
+          {loading ? (
             <Card className="p-8 text-center">
-              <p className="text-[var(--element-secondary)] mb-4">Nenhuma unidade cadastrada.</p>
-              <Button onClick={() => router.push('/settings/units/new')}>
-                Adicionar Primeira Unidade
-              </Button>
+              <p className="text-[var(--element-secondary)]">Carregando unidades...</p>
             </Card>
+          ) : (
+            <>
+              {/* Header */}
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-sm text-[var(--element-secondary)]">
+                  {units.length} unidade{units.length !== 1 ? 's' : ''} cadastrada{units.length !== 1 ? 's' : ''}
+                </p>
+                <Button onClick={() => router.push('/settings/units/new')}>
+                  Nova Unidade
+                </Button>
+              </div>
+
+              {/* Lista */}
+              <div className="space-y-3">
+                {units.map((unit) => (
+                  <UnitCard
+                    key={unit.id}
+                    unit={unit}
+                    onEdit={() => router.push(`/settings/units/${unit.id}`)}
+                    onDelete={() => handleDelete(unit.id)}
+                  />
+                ))}
+              </div>
+
+              {units.length === 0 && !loading && (
+                <Card className="p-8 text-center">
+                  <p className="text-[var(--element-secondary)] mb-4">Nenhuma unidade cadastrada.</p>
+                  <Button onClick={() => router.push('/settings/units/new')}>
+                    Adicionar Primeira Unidade
+                  </Button>
+                </Card>
+              )}
+            </>
           )}
         </div>
       </div>

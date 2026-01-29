@@ -13,7 +13,9 @@ import {
   createUnit,
   updateUnit,
   type UnitStatus,
-} from '@/mocks/settingsMock';
+  type Unit,
+} from '@/lib/settings';
+import { getCurrentSession } from '@/lib/auth/authService';
 
 const DAYS_OF_WEEK = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
@@ -32,48 +34,83 @@ function formatPhone(value: string): string {
   return value.replace(/\D/g, '').replace(/^(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d)/, '$1-$2').slice(0, 15);
 }
 
+type FormData = Omit<Unit, 'id' | 'createdAt' | 'updatedAt'>;
+
+const EMPTY_FORM: FormData = {
+  academyId: '',
+  name: '',
+  status: 'active' as UnitStatus,
+  address: { street: '', number: '', complement: '', neighborhood: '', city: '', state: '', zipCode: '' },
+  phone: '',
+  email: '',
+  operatingHours: DEFAULT_HOURS,
+  accessConfig: { qrEnabled: true, qrToken: '', qrUrl: '', dailyLimitDefault: 1, requireOtpNewDevice: true, toleranceMinutes: 15 },
+  updatedBy: '',
+};
+
 export default function UnitDetailPage() {
   const router = useRouter();
   const params = useParams();
   const isNew = params.id === 'new';
 
-  const [formData, setFormData] = useState(() => {
-    if (isNew) {
-      return {
-        name: '',
-        status: 'active' as UnitStatus,
-        address: { street: '', number: '', complement: '', neighborhood: '', city: '', state: '', zipCode: '' },
-        phone: '',
-        email: '',
-        operatingHours: DEFAULT_HOURS,
-        accessConfig: { qrEnabled: true, qrToken: '', qrUrl: '', dailyLimitDefault: 1, requireOtpNewDevice: true, toleranceMinutes: 15 },
-        updatedBy: '',
-      };
-    }
-    const unit = getUnitById(params.id as string);
-    if (unit) {
-      const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...rest } = unit;
-      return rest;
-    }
-    return null;
-  });
-
+  const [formData, setFormData] = useState<FormData | null>(isNew ? EMPTY_FORM : null);
+  const [loading, setLoading] = useState(!isNew);
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
-  // Redirecionar se não encontrou
+  // Carregar dados da unidade (se não for nova)
   useEffect(() => {
-    if (!isNew && formData === null) {
-      router.push('/settings/units');
+    if (isNew) return;
+    
+    async function loadUnit() {
+      try {
+        const unit = await getUnitById(params.id as string);
+        if (unit) {
+          const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...rest } = unit;
+          // Garantir que address e accessConfig tenham valores padrão
+          setFormData({
+            ...EMPTY_FORM,
+            ...rest,
+            address: {
+              ...EMPTY_FORM.address,
+              ...(rest.address || {}),
+            },
+            operatingHours: rest.operatingHours?.length ? rest.operatingHours : EMPTY_FORM.operatingHours,
+            accessConfig: {
+              ...EMPTY_FORM.accessConfig,
+              ...(rest.accessConfig || {}),
+            },
+          });
+        } else {
+          router.push('/settings/units');
+        }
+      } catch (err) {
+        console.error('[UnitDetailPage] Erro ao carregar:', err);
+        setErrorMessage('Erro ao carregar unidade');
+      } finally {
+        setLoading(false);
+      }
     }
-  }, [isNew, formData, router]);
+    loadUnit();
+  }, [isNew, params.id, router]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col h-full bg-[var(--background-secondary)]">
+        <Header title="Carregando..." />
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-[var(--element-secondary)]">Carregando unidade...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!formData) return null;
 
   const handleChange = (field: string, value: string | boolean) => {
     setHasChanges(true);
-    setSuccessMessage('');
+    setErrorMessage('');
 
     if (field.includes('.')) {
       const [parent, child] = field.split('.');
@@ -104,22 +141,37 @@ export default function UnitDetailPage() {
     if (!formData.name) return;
 
     setIsSaving(true);
-    await new Promise((resolve) => setTimeout(resolve, 600));
+    setErrorMessage('');
 
-    if (isNew) {
-      createUnit(formData, 'staff_001');
-    } else {
-      updateUnit(params.id as string, formData, 'staff_001');
-    }
+    try {
+      // Obter userId da sessão atual
+      const session = await getCurrentSession();
+      const userId = session?.user?.id;
+      
+      if (!userId) {
+        setErrorMessage('Sessão expirada. Faça login novamente.');
+        return;
+      }
 
-    setIsSaving(false);
-    setHasChanges(false);
-    setSuccessMessage('Salvo!');
+      let result;
+      if (isNew) {
+        result = await createUnit(formData, userId);
+      } else {
+        result = await updateUnit(params.id as string, formData, userId);
+      }
 
-    if (isNew) {
-      setTimeout(() => router.push('/settings/units'), 1000);
-    } else {
-      setTimeout(() => setSuccessMessage(''), 2000);
+      if (result.success) {
+        setHasChanges(false);
+        // Sempre redireciona para a lista de unidades após salvar
+        setTimeout(() => router.push('/settings/units'), 500);
+      } else {
+        setErrorMessage(result.error || 'Não foi possível salvar a unidade. Tente novamente.');
+      }
+    } catch (err) {
+      console.error('[UnitDetailPage] Erro ao salvar:', err);
+      setErrorMessage('Ocorreu um erro ao salvar. Tente novamente.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -139,9 +191,9 @@ export default function UnitDetailPage() {
           </div>
 
           {/* Feedback */}
-          {successMessage && (
-            <div className="p-3 rounded-lg bg-[var(--status-positive-background)] text-[var(--status-positive)] text-sm">
-              {successMessage}
+          {errorMessage && (
+            <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+              {errorMessage}
             </div>
           )}
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/common/Header';
 import { Card } from '@/components/ui/Card';
@@ -8,9 +8,10 @@ import { Badge } from '@/components/ui/Badge';
 import {
   getAcademy,
   getUnits,
-  getStaffUsers,
-  getIntegrations,
-} from '@/mocks/settingsMock';
+  type Academy,
+  type Unit,
+} from '@/lib/settings';
+import { getStaffUsers, getIntegrations } from '@/mocks/settingsMock';
 
 // Ícones SVG inline
 const icons = {
@@ -96,10 +97,31 @@ function SettingsLink({ item }: { item: SettingsItem }) {
 }
 
 export default function SettingsPage() {
-  const academy = useMemo(() => getAcademy(), []);
-  const units = useMemo(() => getUnits(), []);
-  const staff = useMemo(() => getStaffUsers(), []);
-  const integrations = useMemo(() => getIntegrations(), []);
+  const [academy, setAcademy] = useState<Academy | null>(null);
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // Ainda usando mock para staff e integrations
+  const staff = getStaffUsers();
+  const integrations = getIntegrations();
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [academyData, unitsData] = await Promise.all([
+          getAcademy(),
+          getUnits(),
+        ]);
+        setAcademy(academyData);
+        setUnits(unitsData);
+      } catch (error) {
+        console.error('[SettingsPage] Erro ao carregar dados:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
+  }, []);
 
   const hasIntegrationIssue = integrations.some((i) => i.status === 'error');
 
@@ -107,7 +129,7 @@ export default function SettingsPage() {
     {
       id: 'academy',
       title: 'Dados da Academia',
-      description: 'Nome, CNPJ, endereço e logo',
+      description: academy ? `${academy.tradeName}` : 'Carregando...',
       href: '/settings/academy',
       icon: icons.building,
     },
@@ -172,10 +194,10 @@ export default function SettingsPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg font-bold text-[var(--element-primary)] truncate">
-                  {academy.tradeName}
+                  {loading ? 'Carregando...' : academy?.tradeName || 'Academia'}
                 </h2>
                 <p className="text-sm text-[var(--element-secondary)]">
-                  {academy.address.city}, {academy.address.state}
+                  {academy?.address?.city || ''}{academy?.address?.state ? `, ${academy.address.state}` : ''}
                 </p>
               </div>
             </div>
