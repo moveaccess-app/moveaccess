@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/common/Header';
 import { Card } from '@/components/ui/Card';
@@ -12,12 +12,14 @@ import {
   getStaffUsers,
   getRoles,
   getUnits,
-  createStaffUser,
   updateStaffUser,
+  toggleStaffStatus,
   type StaffUser,
   type StaffStatus,
   type RoleId,
-} from '@/mocks/settingsMock';
+  type Role,
+} from '@/lib/settings/teamService';
+import type { Unit } from '@/lib/settings/settingsService';
 
 const ROLE_LABELS: Record<RoleId, { label: string; description: string; color: string }> = {
   admin: { label: 'Administrador', description: 'Acesso total ao sistema', color: 'bg-purple-100 text-purple-800' },
@@ -104,12 +106,13 @@ function StaffModal({
   onClose,
 }: {
   staff: StaffUser | null;
-  onSave: (data: Partial<StaffUser>) => void;
+  onSave: (data: Partial<StaffUser>) => Promise<void>;
   onClose: () => void;
 }) {
-  const roles = useMemo(() => getRoles(), []);
-  const units = useMemo(() => getUnits(), []);
   const isNew = !staff;
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [units, setUnits] = useState<Unit[]>([]);
+  const [isLoadingData, setIsLoadingData] = useState(true);
 
   const [formData, setFormData] = useState({
     name: staff?.name || '',
@@ -120,14 +123,36 @@ function StaffModal({
   });
   const [isSaving, setIsSaving] = useState(false);
 
+  // Carregar roles e units async
+  useEffect(() => {
+    async function loadModalData() {
+      setIsLoadingData(true);
+      try {
+        const [rolesData, unitsData] = await Promise.all([
+          getRoles(),
+          getUnits(),
+        ]);
+        setRoles(rolesData);
+        setUnits(unitsData);
+      } catch (error) {
+        console.error('[TeamModal] Erro ao carregar dados:', error);
+      } finally {
+        setIsLoadingData(false);
+      }
+    }
+    loadModalData();
+  }, []);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.email) return;
     
     setIsSaving(true);
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    onSave(formData);
-    setIsSaving(false);
+    try {
+      await onSave(formData);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -139,6 +164,11 @@ function StaffModal({
           </h2>
         </div>
 
+        {isLoadingData ? (
+          <div className="p-6 text-center">
+            <p className="text-sm text-[var(--element-secondary)]">Carregando...</p>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <Label htmlFor="name">Nome</Label>
@@ -183,7 +213,7 @@ function StaffModal({
             >
               {roles.map((role) => (
                 <option key={role.id} value={role.id}>
-                  {ROLE_LABELS[role.id].label} - {ROLE_LABELS[role.id].description}
+                  {ROLE_LABELS[role.id]?.label || role.id} - {ROLE_LABELS[role.id]?.description || ''}
                 </option>
               ))}
             </select>
@@ -227,43 +257,73 @@ function StaffModal({
             </Button>
           </div>
         </form>
+        )}
       </Card>
     </div>
   );
 }
 
 export default function TeamPage() {
-  const [staffList, setStaffList] = useState(() => getStaffUsers());
+  const [staffList, setStaffList] = useState<StaffUser[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [editingStaff, setEditingStaff] = useState<StaffUser | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
+  // Carregar staff list de forma assíncrona
+  const loadStaffList = useCallback(async () => {
+    try {
+      const result = await getStaffUsers();
+      setStaffList(result.data);
+      if (result.error) {
+        console.warn('[TeamPage] Aviso ao carregar equipe:', result.error);
+      }
+    } catch (error) {
+      console.error('[TeamPage] Erro ao carregar equipe:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    async function init() {
+      setIsLoading(true);
+      await loadStaffList();
+      setIsLoading(false);
+    }
+    init();
+  }, [loadStaffList]);
+
   // Filtrar
-  const filteredStaff = useMemo(() => {
-    if (!searchTerm) return staffList;
-    const term = searchTerm.toLowerCase();
-    return staffList.filter(
-      (s) => s.name.toLowerCase().includes(term) || s.email.toLowerCase().includes(term)
-    );
-  }, [staffList, searchTerm]);
+  const filteredStaff = searchTerm
+    ? staffList.filter((s) => {
+        const term = searchTerm.toLowerCase();
+        return s.name.toLowerCase().includes(term) || s.email.toLowerCase().includes(term);
+      })
+    : staffList;
 
   const activeCount = staffList.filter((s) => s.status === 'active').length;
 
-  const handleSave = (data: Partial<StaffUser>) => {
+  const handleSave = async (data: Partial<StaffUser>) => {
     if (editingStaff) {
-      updateStaffUser(editingStaff.id, data, 'staff_001');
-    } else {
-      createStaffUser(data as Omit<StaffUser, 'id' | 'createdAt' | 'updatedAt'>, 'staff_001');
+      const result = await updateStaffUser(editingStaff.id, data);
+      if (result.error) {
+        console.error('[TeamPage] Erro ao atualizar membro:', result.error);
+        return;
+      }
     }
-    setStaffList(getStaffUsers());
+    // Nota: createStaffUser não está implementado em Supabase ainda (TODO: futuro)
+    // Para novo membro, por enquanto só fecha o modal
+    await loadStaffList();
     setEditingStaff(null);
     setIsCreating(false);
   };
 
-  const handleToggleStatus = (staff: StaffUser) => {
-    const newStatus = staff.status === 'active' ? 'inactive' : 'active';
-    updateStaffUser(staff.id, { status: newStatus }, 'staff_001');
-    setStaffList(getStaffUsers());
+  const handleToggleStatus = async (staff: StaffUser) => {
+    const result = await toggleStaffStatus(staff.id, staff.status);
+    if (result.error) {
+      console.error('[TeamPage] Erro ao alterar status:', result.error);
+      return;
+    }
+    await loadStaffList();
   };
 
   return (
@@ -285,10 +345,10 @@ export default function TeamPage() {
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-sm text-[var(--element-secondary)]">
-                {activeCount} membro{activeCount !== 1 ? 's' : ''} ativo{activeCount !== 1 ? 's' : ''}
+                {isLoading ? 'Carregando...' : `${activeCount} membro${activeCount !== 1 ? 's' : ''} ativo${activeCount !== 1 ? 's' : ''}`}
               </p>
             </div>
-            <Button onClick={() => setIsCreating(true)}>
+            <Button onClick={() => setIsCreating(true)} disabled={isLoading}>
               Adicionar
             </Button>
           </div>
@@ -298,6 +358,7 @@ export default function TeamPage() {
             placeholder="Buscar por nome ou e-mail..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            disabled={isLoading}
           />
 
           {/* Legenda de funções */}
@@ -309,19 +370,28 @@ export default function TeamPage() {
             ))}
           </div>
 
-          {/* Lista */}
-          <div className="space-y-3">
-            {filteredStaff.map((staff) => (
-              <StaffCard
-                key={staff.id}
-                staff={staff}
-                onEdit={() => setEditingStaff(staff)}
-                onToggleStatus={() => handleToggleStatus(staff)}
-              />
-            ))}
-          </div>
+          {/* Loading state */}
+          {isLoading && (
+            <Card className="p-8 text-center">
+              <p className="text-[var(--element-secondary)]">Carregando equipe...</p>
+            </Card>
+          )}
 
-          {filteredStaff.length === 0 && (
+          {/* Lista */}
+          {!isLoading && (
+            <div className="space-y-3">
+              {filteredStaff.map((staff) => (
+                <StaffCard
+                  key={staff.id}
+                  staff={staff}
+                  onEdit={() => setEditingStaff(staff)}
+                  onToggleStatus={() => handleToggleStatus(staff)}
+                />
+              ))}
+            </div>
+          )}
+
+          {!isLoading && filteredStaff.length === 0 && (
             <Card className="p-8 text-center">
               <p className="text-[var(--element-secondary)]">
                 {searchTerm ? 'Nenhum resultado encontrado.' : 'Nenhum membro na equipe.'}

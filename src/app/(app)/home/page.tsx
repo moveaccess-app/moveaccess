@@ -6,6 +6,7 @@ import { Header } from '@/components/common/Header';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { useAuth } from '@/contexts/AuthContext'; // Importar useAuth
 import {
   getHomeData,
   formatRelativeTime,
@@ -286,8 +287,9 @@ function getGreeting(): string {
 }
 
 export default function HomePage() {
+  const { logout } = useAuth(); // Obter função de logout
   const homeData = useMemo(() => getHomeData(), []);
-  
+
   const currentDate = new Date().toLocaleDateString('pt-BR', {
     weekday: 'long',
     day: 'numeric',
@@ -302,9 +304,14 @@ export default function HomePage() {
       <Header 
         title="Início" 
         actions={
-          <span className="text-sm text-[var(--element-secondary)]">
-            {formattedDate}
-          </span>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-[var(--element-secondary)] hidden sm:inline">
+              {formattedDate}
+            </span>
+            <Button onClick={logout} variant="outline" size="sm">
+              Sair
+            </Button>
+          </div>
         }
       />
       

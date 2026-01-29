@@ -1,3 +1,6 @@
+'use client';
+
+import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/common/Header';
 import { usersContent } from '@/data/usersContent';
@@ -6,11 +9,12 @@ import {
   formatDate,
   formatDateTime,
   formatCurrency,
-  getCurrentContract,
-  getDocumentStats,
+  type User,
   type UserStatus,
   type ContractStatus,
   type FinancialStatus,
+} from '@/lib/users';
+import {
   type DigitalCardStatus,
   type DocumentStatus,
   type UserType,
@@ -161,6 +165,25 @@ function StatCard({ label, value, subValue, status }: { label: string; value: st
 }
 
 // ============================================
+// FUNÇÕES AUXILIARES
+// ============================================
+
+function getCurrentContract(user: User) {
+  if (!user.currentContractId) return undefined;
+  return user.contracts.find(c => c.id === user.currentContractId);
+}
+
+function getDocumentStats(user: User) {
+  const docs = user.documents;
+  return {
+    total: docs.length,
+    ok: docs.filter(d => d.status === 'ok').length,
+    pending: docs.filter(d => d.status === 'pending').length,
+    expired: docs.filter(d => d.status === 'expired').length,
+  };
+}
+
+// ============================================
 // COMPONENTE PRINCIPAL
 // ============================================
 
@@ -168,9 +191,37 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
-export default async function UserDetailPage({ params }: Props) {
-  const { id } = await params;
-  const user = getUserById(id);
+export default function UserDetailPage({ params }: Props) {
+  const { id } = use(params);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadUser() {
+      setLoading(true);
+      try {
+        const data = await getUserById(id);
+        setUser(data);
+      } catch (error) {
+        console.error('Erro ao carregar usuário:', error);
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadUser();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div>
+        <Header title={usersContent.detailTitle} />
+        <div className="p-8 text-center">
+          <p style={{ color: 'var(--element-secondary)' }}>Carregando...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
