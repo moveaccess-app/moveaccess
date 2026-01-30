@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { Card, Button } from '@/components/ui';
+import { Card, Button, Badge } from '@/components/ui';
 import { 
   OnboardingProgressBar,
   StepIdentification,
@@ -15,10 +15,11 @@ import {
 import {
   OnboardingSession,
   createNewOnboardingSession,
-  getNextStep,
-  getPreviousStep,
+  getNextStep as getMockNextStep,
+  getPreviousStep as getMockPreviousStep,
   getStepIndex,
   ONBOARDING_STEPS,
+  type OnboardingStep,
 } from '@/mocks/onboardingMock';
 import {
   Invite,
@@ -26,6 +27,24 @@ import {
   isInviteValid,
   notifyAcademyPreRegistration,
 } from '@/mocks/inviteMock';
+import {
+  validateInviteToken,
+  activateInviteToken,
+  ERROR_MESSAGES,
+  type ValidateTokenResult,
+} from '@/lib/onboarding/inviteLinkService';
+import {
+  getDraft,
+  updateDraftStep,
+  saveAndAdvance,
+  completeDraft,
+  getNextStep,
+  getPreviousStep,
+  type StudentDraft,
+} from '@/lib/onboarding/studentDraftService';
+
+// Feature flag para usar Supabase
+const USE_SUPABASE = process.env.NEXT_PUBLIC_USE_SUPABASE_ONBOARDING === 'true';
 
 // ============================================
 // ICONS
@@ -47,6 +66,15 @@ function CheckCircleIcon({ className }: { className?: string }) {
   );
 }
 
+function LoadingSpinner({ className }: { className?: string }) {
+  return (
+    <svg className={`animate-spin ${className}`} fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+    </svg>
+  );
+}
+
 // ============================================
 // ESTADOS DA PÁGINA
 // ============================================
@@ -54,10 +82,10 @@ function CheckCircleIcon({ className }: { className?: string }) {
 type PageState = 'loading' | 'invalid' | 'expired' | 'welcome' | 'onboarding' | 'completed';
 
 // ============================================
-// PAGE COMPONENT
+// PAGE COMPONENT (MOCK)
 // ============================================
 
-export default function PublicOnboardingPage() {
+function PublicOnboardingMock() {
   const params = useParams();
   const token = params.token as string;
 
@@ -475,4 +503,340 @@ export default function PublicOnboardingPage() {
   }
 
   return null;
+}
+
+// ============================================
+// VERSÃO SUPABASE
+// ============================================
+
+// Converte draft para formato de session
+function draftToSession(
+  draftId: string,
+  currentStep: string,
+  collectedData: Record<string, unknown>,
+  academyId: string
+): OnboardingSession {
+  const steps = ONBOARDING_STEPS.map(step => {
+    const stepData = collectedData[step.id] || collectedData[step.id.replace('_', '')];
+    const isCompleted = stepData !== undefined;
+    const isCurrent = step.id === currentStep;
+    
+    return {
+      ...step,
+      status: isCompleted ? 'completed' as const : (isCurrent ? 'current' as const : 'pending' as const),
+      completedAt: isCompleted ? new Date().toISOString() : undefined,
+    };
+  });
+
+  return {
+    id: draftId,
+    unitId: academyId,
+    steps,
+    currentStep: currentStep as OnboardingStep,
+    collectedData: {
+      identification: collectedData.identification as OnboardingSession['collectedData']['identification'],
+      personalData: collectedData.personalData as OnboardingSession['collectedData']['personalData'],
+      planSelection: collectedData.planSelection as OnboardingSession['collectedData']['planSelection'],
+      contract: collectedData.contract as OnboardingSession['collectedData']['contract'],
+      payment: collectedData.payment as OnboardingSession['collectedData']['payment'],
+      activation: collectedData.activation as OnboardingSession['collectedData']['activation'],
+    },
+    status: 'in_progress',
+    createdBy: 'user',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+function PublicOnboardingSupabase() {
+  const params = useParams();
+  const token = params.token as string;
+
+  const [pageState, setPageState] = useState<PageState>('loading');
+  const [tokenInfo, setTokenInfo] = useState<ValidateTokenResult | null>(null);
+  const [draft, setDraft] = useState<StudentDraft | null>(null);
+  const [session, setSession] = useState<OnboardingSession | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Inicialização
+  useEffect(() => {
+    async function init() {
+      setPageState('loading');
+      
+      const { data: validation, error: validationError } = await validateInviteToken(token);
+      
+      if (validationError || !validation) {
+        setError('Erro ao validar link. Tente novamente.');
+        setPageState('invalid');
+        return;
+      }
+
+      setTokenInfo(validation);
+
+      if (!validation.is_valid) {
+        if (validation.error_code === 'TOKEN_EXPIRED') {
+          setPageState('expired');
+        } else {
+          setError(ERROR_MESSAGES[validation.error_code || ''] || 'Link inválido');
+          setPageState('invalid');
+        }
+        return;
+      }
+
+      if (validation.draft_id) {
+        const { data: existingDraft } = await getDraft(validation.draft_id);
+        
+        if (existingDraft && existingDraft.status === 'in_progress') {
+          setDraft(existingDraft);
+          setSession(draftToSession(
+            existingDraft.id,
+            existingDraft.current_step,
+            existingDraft.collected_data,
+            existingDraft.academy_id
+          ));
+          setPageState('onboarding');
+          return;
+        }
+        
+        if (existingDraft?.status === 'published' || existingDraft?.status === 'completed') {
+          setPageState('completed');
+          return;
+        }
+      }
+
+      setPageState('welcome');
+    }
+
+    init();
+  }, [token]);
+
+  const handleStart = async () => {
+    setSaving(true);
+    
+    const { data: useResult, error: useError } = await activateInviteToken(token);
+    
+    if (useError || !useResult?.success) {
+      setError(ERROR_MESSAGES[useResult?.error_code || ''] || 'Erro ao iniciar cadastro');
+      setSaving(false);
+      return;
+    }
+
+    const { data: newDraft } = await getDraft(useResult.draft_id!);
+    
+    if (!newDraft) {
+      setError('Erro ao carregar cadastro');
+      setSaving(false);
+      return;
+    }
+
+    setDraft(newDraft);
+    setSession(draftToSession(
+      newDraft.id,
+      newDraft.current_step,
+      newDraft.collected_data,
+      newDraft.academy_id
+    ));
+    setSaving(false);
+    setPageState('onboarding');
+  };
+
+  const goToNextStep = useCallback(async (stepData: Record<string, unknown>) => {
+    if (!draft || !session) return;
+    
+    setSaving(true);
+    const nextStep = getNextStep(draft.current_step as OnboardingStep);
+    
+    const stepKeyMap: Record<OnboardingStep, string> = {
+      'identification': 'identification',
+      'personal_data': 'personalData',
+      'plan_selection': 'planSelection',
+      'contract': 'contract',
+      'payment': 'payment',
+      'activation': 'activation',
+    };
+    
+    if (nextStep) {
+      await saveAndAdvance(draft.id, draft.current_step as OnboardingStep, stepData, nextStep);
+      
+      const dataKey = stepKeyMap[draft.current_step as OnboardingStep];
+      const updatedCollectedData = { ...draft.collected_data, [dataKey]: stepData };
+      
+      setDraft(prev => prev ? { ...prev, current_step: nextStep, collected_data: updatedCollectedData } : null);
+      setSession(prev => prev ? {
+        ...prev,
+        currentStep: nextStep,
+        collectedData: { ...prev.collectedData, [dataKey]: stepData },
+        steps: prev.steps.map(s => {
+          if (s.id === draft.current_step) return { ...s, status: 'completed' as const };
+          if (s.id === nextStep) return { ...s, status: 'current' as const };
+          return s;
+        }),
+      } : null);
+    } else {
+      await updateDraftStep(draft.id, draft.current_step as OnboardingStep, stepData);
+      await completeDraft(draft.id);
+      setPageState('completed');
+    }
+    
+    setSaving(false);
+  }, [draft, session]);
+
+  const goToPreviousStep = useCallback(() => {
+    if (!draft) return;
+    const prevStep = getPreviousStep(draft.current_step as OnboardingStep);
+    if (!prevStep) return;
+    
+    setDraft(prev => prev ? { ...prev, current_step: prevStep } : null);
+    setSession(prev => prev ? {
+      ...prev,
+      currentStep: prevStep,
+      steps: prev.steps.map(s => {
+        if (s.id === prevStep) return { ...s, status: 'current' as const };
+        if (s.id === draft.current_step) return { ...s, status: 'pending' as const };
+        return s;
+      }),
+    } : null);
+  }, [draft]);
+
+  const handlePause = useCallback(() => {
+    alert('Seu progresso foi salvo! Você pode continuar usando o mesmo link.');
+  }, []);
+
+  const currentStepIndex = session ? ONBOARDING_STEPS.findIndex(s => s.id === session.currentStep) : 0;
+  const currentStepInfo = ONBOARDING_STEPS[currentStepIndex];
+
+  const renderCurrentStep = () => {
+    if (!session) return null;
+    switch (session.currentStep) {
+      case 'identification': return <StepIdentification session={session} onNext={goToNextStep} onBack={handlePause} />;
+      case 'personal_data': return <StepPersonalData session={session} onNext={goToNextStep} onBack={goToPreviousStep} />;
+      case 'plan_selection': return <StepPlanSelection session={session} onNext={goToNextStep} onBack={goToPreviousStep} />;
+      case 'contract': return <StepContract session={session} onNext={goToNextStep} onBack={goToPreviousStep} />;
+      case 'payment': return <StepPayment session={session} onNext={goToNextStep} onBack={goToPreviousStep} />;
+      case 'activation': return <StepActivation session={session} onNext={goToNextStep} onBack={goToPreviousStep} />;
+      default: return null;
+    }
+  };
+
+  if (pageState === 'loading') {
+    return (
+      <div className="min-h-screen bg-[var(--background-secondary)] flex items-center justify-center p-6">
+        <Card className="max-w-md w-full p-8 text-center">
+          <LoadingSpinner className="w-12 h-12 mx-auto text-[var(--accent-primary)] mb-4" />
+          <p className="text-[var(--text-secondary)]">Validando link...</p>
+        </Card>
+      </div>
+    );
+  }
+
+  if (pageState === 'invalid') {
+    return (
+      <div className="min-h-screen bg-[var(--background-secondary)] flex items-center justify-center p-6">
+        <Card className="max-w-md w-full p-8 text-center">
+          <div className="w-20 h-20 mx-auto bg-[var(--status-negative)]/10 rounded-full flex items-center justify-center mb-4">
+            <AlertIcon className="w-12 h-12 text-[var(--status-negative)]" />
+          </div>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-2">Link inválido</h1>
+          <p className="text-[var(--text-secondary)]">{error || 'Este link não foi encontrado.'}</p>
+        </Card>
+      </div>
+    );
+  }
+
+  if (pageState === 'expired') {
+    return (
+      <div className="min-h-screen bg-[var(--background-secondary)] flex items-center justify-center p-6">
+        <Card className="max-w-md w-full p-8 text-center">
+          <div className="w-20 h-20 mx-auto bg-[var(--status-alert)]/10 rounded-full flex items-center justify-center mb-4">
+            <AlertIcon className="w-12 h-12 text-[var(--status-alert)]" />
+          </div>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-2">Link expirado</h1>
+          <p className="text-[var(--text-secondary)]">Solicite um novo link à academia.</p>
+        </Card>
+      </div>
+    );
+  }
+
+  if (pageState === 'welcome') {
+    return (
+      <div className="min-h-screen bg-[var(--background-secondary)] flex items-center justify-center p-6">
+        <Card className="max-w-md w-full p-8 text-center">
+          <div className="w-20 h-20 mx-auto bg-[var(--accent-primary)]/10 rounded-full flex items-center justify-center mb-4">
+            <span className="text-4xl">🏋️</span>
+          </div>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-2">Bem-vindo(a)!</h1>
+          <p className="text-[var(--text-secondary)] mb-6">
+            Você foi convidado para se cadastrar na academia. O processo leva apenas alguns minutos.
+          </p>
+          <Button onClick={handleStart} className="w-full" disabled={saving}>
+            {saving ? <><LoadingSpinner className="w-4 h-4 mr-2" />Iniciando...</> : 'Iniciar cadastro'}
+          </Button>
+          {tokenInfo?.expected_email && (
+            <p className="text-xs text-[var(--text-tertiary)] text-center mt-4">
+              Link destinado a: {tokenInfo.expected_email}
+            </p>
+          )}
+        </Card>
+      </div>
+    );
+  }
+
+  if (pageState === 'completed') {
+    return (
+      <div className="min-h-screen bg-[var(--background-secondary)] flex items-center justify-center p-6">
+        <Card className="max-w-md w-full p-8 text-center">
+          <div className="w-20 h-20 mx-auto bg-[var(--status-positive)]/10 rounded-full flex items-center justify-center mb-4">
+            <CheckCircleIcon className="w-12 h-12 text-[var(--status-positive)]" />
+          </div>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-2">Cadastro concluído! 🎉</h1>
+          <p className="text-[var(--text-secondary)] mb-6">
+            Suas informações foram enviadas. Em breve você receberá um e-mail com os próximos passos.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
+  if (pageState === 'onboarding' && session) {
+    return (
+      <div className="min-h-screen bg-[var(--background-secondary)]">
+        <header className="sticky top-0 z-10 bg-[var(--background-primary)] border-b border-[var(--border-subtle)]">
+          <div className="max-w-3xl mx-auto px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-[var(--text-tertiary)]">Cadastro via link de convite</p>
+                <p className="text-sm font-medium text-[var(--text-primary)]">
+                  {currentStepInfo?.title} • Etapa {currentStepIndex + 1} de {ONBOARDING_STEPS.length}
+                </p>
+              </div>
+              {saving && <Badge variant="warning"><LoadingSpinner className="w-3 h-3 mr-1" />Salvando...</Badge>}
+            </div>
+            <div className="mt-4">
+              <OnboardingProgressBar current={currentStepIndex + 1} total={ONBOARDING_STEPS.length} showLabel={false} />
+            </div>
+          </div>
+        </header>
+        <main className="max-w-3xl mx-auto px-6 py-8">
+          <Card className="p-6 md:p-8">{renderCurrentStep()}</Card>
+          <p className="text-xs text-center text-[var(--text-tertiary)] mt-4">
+            💾 Seu progresso é salvo automaticamente. Você pode fechar e continuar depois.
+          </p>
+        </main>
+      </div>
+    );
+  }
+
+  return null;
+}
+
+// ============================================
+// EXPORT (escolhe versão baseado na feature flag)
+// ============================================
+
+export default function PublicOnboardingPage() {
+  if (USE_SUPABASE) {
+    return <PublicOnboardingSupabase />;
+  }
+  return <PublicOnboardingMock />;
 }

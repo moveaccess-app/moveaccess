@@ -6,8 +6,17 @@ import {
   Invite, 
   InviteDiscount, 
   createInvite, 
-  getInviteUrl 
+  getInviteUrl as getMockInviteUrl,
 } from '@/mocks/inviteMock';
+import {
+  createInviteLink,
+  getInviteUrl,
+  type InviteLink,
+} from '@/lib/onboarding/inviteLinkService';
+
+// Feature flag para usar Supabase
+const USE_SUPABASE = process.env.NEXT_PUBLIC_USE_SUPABASE_ONBOARDING === 'true';
+const DEFAULT_ACADEMY_ID = 'a0000000-0000-0000-0000-000000000001';
 
 // ============================================
 // TIPOS
@@ -54,10 +63,10 @@ function LinkIcon({ className }: { className?: string }) {
 }
 
 // ============================================
-// COMPONENTE
+// COMPONENTE MOCK
 // ============================================
 
-export function InviteGenerator({ onClose, onInviteCreated }: InviteGeneratorProps) {
+function InviteGeneratorMock({ onClose, onInviteCreated }: InviteGeneratorProps) {
   const [step, setStep] = useState<'config' | 'generated'>('config');
   const [selectedUnit, setSelectedUnit] = useState(mockUnits[0].id);
   const [enrollmentValue, setEnrollmentValue] = useState(100);
@@ -311,4 +320,224 @@ export function InviteGenerator({ onClose, onInviteCreated }: InviteGeneratorPro
       </div>
     </div>
   );
+}
+
+// ============================================
+// COMPONENTE SUPABASE
+// ============================================
+
+function InviteGeneratorSupabase({ onClose, onInviteCreated }: InviteGeneratorProps) {
+  const [step, setStep] = useState<'config' | 'generated'>('config');
+  const [description, setDescription] = useState('');
+  const [expectedEmail, setExpectedEmail] = useState('');
+  const [expiresInDays, setExpiresInDays] = useState(30);
+  const [generatedLink, setGeneratedLink] = useState<InviteLink | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleGenerate = async () => {
+    setLoading(true);
+    setError(null);
+
+    const { data: link, error: createError } = await createInviteLink({
+      academyId: DEFAULT_ACADEMY_ID,
+      description: description || undefined,
+      expectedEmail: expectedEmail || undefined,
+      expiresInDays,
+    });
+
+    setLoading(false);
+
+    if (createError || !link) {
+      setError('Erro ao gerar link. Tente novamente.');
+      return;
+    }
+
+    setGeneratedLink(link);
+    setStep('generated');
+  };
+
+  const handleCopy = async () => {
+    if (!generatedLink) return;
+    
+    const url = getInviteUrl(generatedLink.token);
+    await navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleNewInvite = () => {
+    setStep('config');
+    setGeneratedLink(null);
+    setCopied(false);
+    setDescription('');
+    setExpectedEmail('');
+  };
+
+  if (step === 'generated' && generatedLink) {
+    const url = getInviteUrl(generatedLink.token);
+    
+    return (
+      <div className="space-y-6">
+        <div className="text-center space-y-2">
+          <div className="w-16 h-16 mx-auto bg-[var(--status-positive)]/10 rounded-full flex items-center justify-center">
+            <LinkIcon className="w-8 h-8 text-[var(--status-positive)]" />
+          </div>
+          <h2 className="text-xl font-semibold text-[var(--text-primary)]">
+            Link gerado com sucesso!
+          </h2>
+          <p className="text-sm text-[var(--text-secondary)]">
+            Copie e envie para o futuro aluno
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Link de cadastro</Label>
+          <div className="flex gap-2">
+            <Input value={url} readOnly className="font-mono text-sm" />
+            <Button onClick={handleCopy} variant={copied ? 'secondary' : 'default'}>
+              {copied ? (
+                <><CheckIcon className="w-4 h-4 mr-1" />Copiado</>
+              ) : (
+                <><CopyIcon className="w-4 h-4 mr-1" />Copiar</>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        <Card className="p-4 bg-[var(--background-secondary)] border-none">
+          <div className="space-y-3 text-sm">
+            {generatedLink.description && (
+              <div className="flex justify-between">
+                <span className="text-[var(--text-tertiary)]">Descrição</span>
+                <span className="text-[var(--text-primary)]">{generatedLink.description}</span>
+              </div>
+            )}
+            {generatedLink.expected_email && (
+              <div className="flex justify-between">
+                <span className="text-[var(--text-tertiary)]">Email esperado</span>
+                <span className="text-[var(--text-primary)]">{generatedLink.expected_email}</span>
+              </div>
+            )}
+            <div className="flex justify-between">
+              <span className="text-[var(--text-tertiary)]">Válido até</span>
+              <span className="text-[var(--text-primary)]">
+                {new Date(generatedLink.expires_at).toLocaleDateString('pt-BR')}
+              </span>
+            </div>
+          </div>
+        </Card>
+
+        <div className="p-4 bg-[var(--element-primary)]/5 rounded-lg">
+          <p className="text-sm text-[var(--text-secondary)]">
+            <strong className="text-[var(--text-primary)]">📱 Dica:</strong> Envie este link via WhatsApp, 
+            e-mail ou SMS. O aluno poderá iniciar, pausar e continuar o cadastro quando quiser.
+          </p>
+        </div>
+
+        <div className="flex gap-3 justify-end">
+          <Button variant="ghost" onClick={onClose}>Fechar</Button>
+          <Button variant="outline" onClick={handleNewInvite}>Gerar novo link</Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-1">
+        <h2 className="text-xl font-semibold text-[var(--text-primary)]">
+          Gerar link de cadastro
+        </h2>
+        <p className="text-sm text-[var(--text-secondary)]">
+          O aluno poderá se cadastrar sozinho usando este link.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="description">Descrição (opcional)</Label>
+        <Input
+          id="description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="Ex: Link para João Silva"
+        />
+        <p className="text-xs text-[var(--text-tertiary)]">
+          Ajuda a identificar o link na lista de convites.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="email">Email esperado (opcional)</Label>
+        <Input
+          id="email"
+          type="email"
+          value={expectedEmail}
+          onChange={(e) => setExpectedEmail(e.target.value)}
+          placeholder="aluno@email.com"
+        />
+        <p className="text-xs text-[var(--text-tertiary)]">
+          Se informado, o sistema verificará se o email do cadastro confere.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="expires">Validade do link</Label>
+        <select
+          id="expires"
+          value={expiresInDays}
+          onChange={(e) => setExpiresInDays(Number(e.target.value))}
+          className="w-full h-10 px-3 rounded-lg border border-[var(--border-default)] bg-[var(--background-primary)] text-sm"
+        >
+          <option value={7}>7 dias</option>
+          <option value={14}>14 dias</option>
+          <option value={30}>30 dias</option>
+          <option value={60}>60 dias</option>
+          <option value={90}>90 dias</option>
+        </select>
+      </div>
+
+      {error && (
+        <div className="p-3 bg-[var(--status-negative)]/10 rounded-lg">
+          <p className="text-sm text-[var(--status-negative)]">{error}</p>
+        </div>
+      )}
+
+      <Card className="p-4 bg-[var(--background-secondary)] border-none">
+        <ul className="space-y-2 text-sm text-[var(--text-secondary)]">
+          <li className="flex items-start gap-2">
+            <span className="w-1.5 h-1.5 bg-[var(--element-primary)] rounded-full mt-1.5 flex-shrink-0" />
+            O aluno pode pausar e continuar o cadastro quando quiser
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="w-1.5 h-1.5 bg-[var(--element-primary)] rounded-full mt-1.5 flex-shrink-0" />
+            O progresso aparece na lista de &quot;Cadastros em Andamento&quot;
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="w-1.5 h-1.5 bg-[var(--element-primary)] rounded-full mt-1.5 flex-shrink-0" />
+            Você pode arquivar cadastros incompletos
+          </li>
+        </ul>
+      </Card>
+
+      <div className="flex gap-3 justify-end">
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button onClick={handleGenerate} disabled={loading}>
+          {loading ? 'Gerando...' : 'Gerar link'}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// EXPORT (escolhe versão baseado na feature flag)
+// ============================================
+
+export function InviteGenerator(props: InviteGeneratorProps) {
+  if (USE_SUPABASE) {
+    return <InviteGeneratorSupabase {...props} />;
+  }
+  return <InviteGeneratorMock {...props} />;
 }

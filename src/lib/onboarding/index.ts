@@ -3,4 +3,5 @@
  */
 
 export * from './studentDraftService';
+export * from './inviteLinkService';
 export { useStudentDraft } from './useStudentDraft';
