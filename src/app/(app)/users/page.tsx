@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/common/Header';
-import { Input, Select, Button, Card } from '@/components/ui';
+import { Input, Select, Button, Card, Badge } from '@/components/ui';
 import { usersContent } from '@/data/usersContent';
 import { 
   searchAndFilterUsers,
@@ -11,8 +11,22 @@ import {
   type User,
 } from '@/lib/users';
 import { InviteGenerator } from '@/components/onboarding/InviteGenerator';
+import { listDrafts, archiveDraft, restoreDraft, type StudentDraftListItem, type DraftOrigin } from '@/lib/onboarding';
+
+// Feature flag para usar Supabase Onboarding
+const USE_SUPABASE_ONBOARDING = process.env.NEXT_PUBLIC_USE_SUPABASE_ONBOARDING === 'true';
+const DEFAULT_ACADEMY_ID = 'a0000000-0000-0000-0000-000000000001';
 
 const ITEMS_PER_PAGE = 20;
+
+// Labels de origem
+const ORIGIN_LABELS: Record<DraftOrigin, { label: string; icon: string }> = {
+  staff: { label: 'Academia', icon: '🏢' },
+  self_registration: { label: 'Auto-cadastro', icon: '👤' },
+  invite_link: { label: 'Link convite', icon: '🔗' },
+};
+
+type DraftTab = 'active' | 'archived';
 
 // ============================================
 // FUNÇÕES DE ESTADO COMPOSTO
@@ -170,6 +184,67 @@ export default function UsersPage() {
   // Estado para dados assíncronos
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Estado para drafts (cadastros em andamento)
+  const [drafts, setDrafts] = useState<StudentDraftListItem[]>([]);
+  const [archivedDrafts, setArchivedDrafts] = useState<StudentDraftListItem[]>([]);
+  const [loadingDrafts, setLoadingDrafts] = useState(true);
+  const [showDrafts, setShowDrafts] = useState(true);
+  const [draftTab, setDraftTab] = useState<DraftTab>('active');
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  // Carregar drafts do Supabase
+  const loadDrafts = useCallback(async () => {
+    if (!USE_SUPABASE_ONBOARDING) {
+      setLoadingDrafts(false);
+      return;
+    }
+    
+    setLoadingDrafts(true);
+    try {
+      // Carregar drafts ativos e arquivados em paralelo
+      const [activeResult, archivedResult] = await Promise.all([
+        listDrafts(DEFAULT_ACADEMY_ID, { status: ['in_progress', 'completed'] }),
+        listDrafts(DEFAULT_ACADEMY_ID, { status: ['archived'] }),
+      ]);
+      setDrafts(activeResult.data);
+      setArchivedDrafts(archivedResult.data);
+    } catch (error) {
+      console.error('Erro ao carregar drafts:', error);
+      setDrafts([]);
+      setArchivedDrafts([]);
+    } finally {
+      setLoadingDrafts(false);
+    }
+  }, []);
+
+  // Arquivar draft
+  const handleArchive = async (draftId: string) => {
+    setActionLoading(draftId);
+    try {
+      const { error } = await archiveDraft(draftId);
+      if (error) throw error;
+      await loadDrafts(); // Recarrega a lista
+    } catch (error) {
+      console.error('Erro ao arquivar:', error);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Restaurar draft arquivado
+  const handleRestore = async (draftId: string) => {
+    setActionLoading(draftId);
+    try {
+      const { error } = await restoreDraft(draftId);
+      if (error) throw error;
+      await loadDrafts(); // Recarrega a lista
+    } catch (error) {
+      console.error('Erro ao restaurar:', error);
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   // Carregar usuários do service
   const loadUsers = useCallback(async () => {
@@ -184,6 +259,11 @@ export default function UsersPage() {
       setLoading(false);
     }
   }, [searchQuery, statusFilter]);
+
+  // Carregar drafts na montagem
+  useEffect(() => {
+    loadDrafts();
+  }, [loadDrafts]);
 
   // Recarregar quando filtros mudarem
   useEffect(() => {
@@ -239,6 +319,196 @@ export default function UsersPage() {
             </Button>
           </div>
         </div>
+
+        {/* Seção de Cadastros em Andamento */}
+        {USE_SUPABASE_ONBOARDING && (drafts.length > 0 || archivedDrafts.length > 0) && (
+          <div className="mb-6">
+            <div 
+              className="flex items-center justify-between mb-3 cursor-pointer"
+              onClick={() => setShowDrafts(!showDrafts)}
+            >
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-medium" style={{ color: 'var(--element-primary)' }}>
+                  📝 Cadastros em Andamento
+                </h3>
+                <Badge variant="warning">{drafts.length + archivedDrafts.length}</Badge>
+              </div>
+              <span 
+                className="text-xs"
+                style={{ color: 'var(--element-secondary)' }}
+              >
+                {showDrafts ? '▼ Ocultar' : '▶ Mostrar'}
+              </span>
+            </div>
+            
+            {showDrafts && (
+              <>
+                {/* Tabs */}
+                <div className="flex gap-1 mb-3">
+                  <button
+                    onClick={() => setDraftTab('active')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                      draftTab === 'active' 
+                        ? 'bg-[var(--accent-primary)] text-white' 
+                        : 'bg-[var(--background-secondary)] text-[var(--element-secondary)] hover:bg-[var(--background-tertiary)]'
+                    }`}
+                  >
+                    Ativos ({drafts.length})
+                  </button>
+                  <button
+                    onClick={() => setDraftTab('archived')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                      draftTab === 'archived' 
+                        ? 'bg-[var(--accent-primary)] text-white' 
+                        : 'bg-[var(--background-secondary)] text-[var(--element-secondary)] hover:bg-[var(--background-tertiary)]'
+                    }`}
+                  >
+                    Arquivados ({archivedDrafts.length})
+                  </button>
+                </div>
+
+                {/* Tabela de drafts */}
+                {((draftTab === 'active' && drafts.length > 0) || (draftTab === 'archived' && archivedDrafts.length > 0)) && (
+                  <div 
+                    className="rounded-lg border overflow-hidden mb-4"
+                    style={{
+                      backgroundColor: 'var(--background-primary)',
+                      borderColor: draftTab === 'active' ? 'var(--status-alert)' : 'var(--divider-primary)',
+                    }}
+                  >
+                    <table className="w-full">
+                      <thead>
+                        <tr style={{ backgroundColor: 'var(--background-secondary)' }}>
+                          <th className="text-left py-2 px-4 text-xs font-medium uppercase" style={{ color: 'var(--element-secondary)' }}>
+                            Nome / Email
+                          </th>
+                          <th className="text-left py-2 px-4 text-xs font-medium uppercase" style={{ color: 'var(--element-secondary)' }}>
+                            Origem
+                          </th>
+                          <th className="text-left py-2 px-4 text-xs font-medium uppercase" style={{ color: 'var(--element-secondary)' }}>
+                            Etapa
+                          </th>
+                          <th className="text-left py-2 px-4 text-xs font-medium uppercase" style={{ color: 'var(--element-secondary)' }}>
+                            Atualização
+                          </th>
+                          <th className="text-right py-2 px-4 text-xs font-medium uppercase" style={{ color: 'var(--element-secondary)' }}>
+                            Ações
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(draftTab === 'active' ? drafts : archivedDrafts).map((draft) => {
+                          const origin = ORIGIN_LABELS[draft.origin || 'staff'];
+                          return (
+                            <tr 
+                              key={draft.id}
+                              className="border-t"
+                              style={{ borderColor: 'var(--divider-primary)' }}
+                            >
+                              <td className="py-3 px-4">
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-medium" style={{ color: 'var(--element-primary)' }}>
+                                    {draft.student_name || 'Sem nome'}
+                                  </span>
+                                  <span className="text-xs" style={{ color: 'var(--element-secondary)' }}>
+                                    {draft.student_email || 'Sem email'}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="py-3 px-4">
+                                <span 
+                                  className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded"
+                                  style={{ 
+                                    backgroundColor: 'var(--background-secondary)',
+                                    color: 'var(--element-secondary)'
+                                  }}
+                                >
+                                  {origin.icon} {origin.label}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4">
+                                <Badge variant={draft.status === 'completed' ? 'success' : 'warning'}>
+                                  {draft.current_step === 'identification' && 'Identificação'}
+                                  {draft.current_step === 'personal_data' && 'Dados Pessoais'}
+                                  {draft.current_step === 'plan_selection' && 'Plano'}
+                                  {draft.current_step === 'contract' && 'Contrato'}
+                                  {draft.current_step === 'payment' && 'Pagamento'}
+                                  {draft.current_step === 'activation' && 'Ativação'}
+                                </Badge>
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className="text-xs" style={{ color: 'var(--element-secondary)' }}>
+                                  {new Date(draft.updated_at).toLocaleDateString('pt-BR', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <div className="flex justify-end gap-2">
+                                  {draftTab === 'active' ? (
+                                    <>
+                                      <Button 
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleArchive(draft.id)}
+                                        disabled={actionLoading === draft.id}
+                                      >
+                                        {actionLoading === draft.id ? '...' : '📦 Arquivar'}
+                                      </Button>
+                                      <Button 
+                                        size="sm"
+                                        onClick={() => router.push(`/users/onboarding?draft=${draft.id}`)}
+                                      >
+                                        Continuar →
+                                      </Button>
+                                    </>
+                                  ) : (
+                                    <Button 
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleRestore(draft.id)}
+                                      disabled={actionLoading === draft.id}
+                                    >
+                                      {actionLoading === draft.id ? '...' : '↩️ Restaurar'}
+                                    </Button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Empty state para tab selecionada */}
+                {draftTab === 'active' && drafts.length === 0 && (
+                  <div className="text-center py-6 text-sm" style={{ color: 'var(--element-secondary)' }}>
+                    Nenhum cadastro ativo no momento.
+                  </div>
+                )}
+                {draftTab === 'archived' && archivedDrafts.length === 0 && (
+                  <div className="text-center py-6 text-sm" style={{ color: 'var(--element-secondary)' }}>
+                    Nenhum cadastro arquivado.
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Loading drafts indicator */}
+        {USE_SUPABASE_ONBOARDING && loadingDrafts && (
+          <div className="mb-4 p-3 rounded-lg" style={{ backgroundColor: 'var(--background-secondary)' }}>
+            <span className="text-sm" style={{ color: 'var(--element-secondary)' }}>
+              Carregando cadastros em andamento...
+            </span>
+          </div>
+        )}
 
         {/* Filtros */}
         <div className="mb-4 flex gap-3">

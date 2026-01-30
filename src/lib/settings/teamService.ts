@@ -155,6 +155,30 @@ export async function toggleStaffStatus(
   return { success: true, error: null };
 }
 
+/**
+ * Cria um novo membro da equipe
+ */
+export async function createStaffUser(
+  data: {
+    name: string;
+    email: string;
+    phone?: string;
+    roleId: RoleId;
+    unitIds?: string[];
+  }
+): Promise<{ success: boolean; staffId: string | null; error: string | null }> {
+  if (USE_SUPABASE) {
+    return supabaseService.createStaffUser(data);
+  }
+  
+  // Mock - gera ID fake e retorna sucesso
+  const mockId = `mock_${Date.now()}`;
+  return { success: true, staffId: mockId, error: null };
+}
+
+// Re-export CreateStaffData type
+export type { CreateStaffData } from './teamServiceSupabase';
+
 // ============================================================================
 // ADAPTERS
 // ============================================================================

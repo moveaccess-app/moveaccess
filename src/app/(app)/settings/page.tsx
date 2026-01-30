@@ -8,10 +8,12 @@ import { Badge } from '@/components/ui/Badge';
 import {
   getAcademy,
   getUnits,
+  getStaffUsers,
   type Academy,
   type Unit,
+  type StaffUser,
 } from '@/lib/settings';
-import { getStaffUsers, getIntegrations } from '@/mocks/settingsMock';
+import { getIntegrations } from '@/mocks/settingsMock';
 
 // Ícones SVG inline
 const icons = {
@@ -99,21 +101,23 @@ function SettingsLink({ item }: { item: SettingsItem }) {
 export default function SettingsPage() {
   const [academy, setAcademy] = useState<Academy | null>(null);
   const [units, setUnits] = useState<Unit[]>([]);
+  const [staff, setStaff] = useState<StaffUser[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Ainda usando mock para staff e integrations
-  const staff = getStaffUsers();
+  // Ainda usando mock para integrations
   const integrations = getIntegrations();
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [academyData, unitsData] = await Promise.all([
+        const [academyData, unitsData, staffResult] = await Promise.all([
           getAcademy(),
           getUnits(),
+          getStaffUsers(),
         ]);
         setAcademy(academyData);
         setUnits(unitsData);
+        setStaff(staffResult.data);
       } catch (error) {
         console.error('[SettingsPage] Erro ao carregar dados:', error);
       } finally {

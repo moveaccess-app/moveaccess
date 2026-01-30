@@ -331,3 +331,82 @@ export async function toggleStaffStatus(id: string, currentStatus: StaffStatus):
   const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
   return updateStaffUser(id, { status: newStatus });
 }
+
+/**
+ * Dados necessários para criar um novo membro da equipe
+ */
+export interface CreateStaffData {
+  name: string;
+  email: string;
+  phone?: string;
+  roleId: RoleId;
+  unitIds?: string[];
+}
+
+/**
+ * Cria um novo membro da equipe via Edge Function
+ * 
+ * A Edge Function usa service_role para:
+ * 1. Criar usuário no auth.users (via inviteUserByEmail)
+ * 2. Criar profile, staff_profile, academy_membership
+ * 3. Opcionalmente criar staff_unit_assignments
+ * 
+ * O novo membro receberá um email para definir sua senha.
+ */
+export async function createStaffUser(
+  data: CreateStaffData
+): Promise<{ success: boolean; staffId: string | null; error: string | null }> {
+  log('createStaffUser() via Edge Function', data.email, data.roleId);
+
+  // Usar mesmo método de obter token que funciona nas outras funções
+  const token = getAccessToken();
+  if (!token) {
+    console.error('[TeamService] Token não encontrado no localStorage');
+    return { success: false, staffId: null, error: 'Não autenticado - faça login novamente' };
+  }
+
+  try {
+    const response = await fetch(
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/create-staff-user`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: data.name,
+          email: data.email,
+          phone: data.phone || null,
+          roleId: data.roleId,
+          unitIds: data.unitIds || [],
+        }),
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      console.error('[TeamService] Erro ao criar staff:', result);
+      return { 
+        success: false, 
+        staffId: null, 
+        error: result.error || `Erro ${response.status}` 
+      };
+    }
+
+    log('createStaffUser() -> sucesso, staffId:', result.staffId);
+    return { 
+      success: true, 
+      staffId: result.staffId, 
+      error: null 
+    };
+  } catch (err) {
+    console.error('[TeamService] Erro ao chamar Edge Function:', err);
+    return { 
+      success: false, 
+      staffId: null, 
+      error: err instanceof Error ? err.message : 'Erro ao criar membro' 
+    };
+  }
+}

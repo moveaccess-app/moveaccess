@@ -14,6 +14,7 @@ import {
   getUnits,
   updateStaffUser,
   toggleStaffStatus,
+  createStaffUser,
   type StaffUser,
   type StaffStatus,
   type RoleId,
@@ -304,14 +305,31 @@ export default function TeamPage() {
 
   const handleSave = async (data: Partial<StaffUser>) => {
     if (editingStaff) {
+      // Editar membro existente
       const result = await updateStaffUser(editingStaff.id, data);
       if (result.error) {
         console.error('[TeamPage] Erro ao atualizar membro:', result.error);
         return;
       }
+    } else {
+      // Criar novo membro
+      if (!data.name || !data.email || !data.roleId) {
+        console.error('[TeamPage] Dados incompletos para criar membro');
+        return;
+      }
+      const result = await createStaffUser({
+        name: data.name,
+        email: data.email,
+        phone: data.phone || undefined,
+        roleId: data.roleId,
+        unitIds: data.unitIds,
+      });
+      if (result.error) {
+        console.error('[TeamPage] Erro ao criar membro:', result.error);
+        alert(`Erro ao criar membro: ${result.error}`);
+        return;
+      }
     }
-    // Nota: createStaffUser não está implementado em Supabase ainda (TODO: futuro)
-    // Para novo membro, por enquanto só fecha o modal
     await loadStaffList();
     setEditingStaff(null);
     setIsCreating(false);
