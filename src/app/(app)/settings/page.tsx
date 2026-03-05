@@ -6,12 +6,10 @@ import { Header } from '@/components/common/Header';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import {
-  getAcademy,
-  getUnits,
-  type Academy,
-  type Unit,
+  getEmptySettingsOverview,
+  getSettingsOverview,
+  type SettingsOverview,
 } from '@/lib/settings';
-import { getStaffUsers, getIntegrations } from '@/mocks/settingsMock';
 
 // Ícones SVG inline
 const icons = {
@@ -97,23 +95,14 @@ function SettingsLink({ item }: { item: SettingsItem }) {
 }
 
 export default function SettingsPage() {
-  const [academy, setAcademy] = useState<Academy | null>(null);
-  const [units, setUnits] = useState<Unit[]>([]);
+  const [overview, setOverview] = useState<SettingsOverview>(getEmptySettingsOverview);
   const [loading, setLoading] = useState(true);
-  
-  // Ainda usando mock para staff e integrations
-  const staff = getStaffUsers();
-  const integrations = getIntegrations();
 
   useEffect(() => {
     async function loadData() {
       try {
-        const [academyData, unitsData] = await Promise.all([
-          getAcademy(),
-          getUnits(),
-        ]);
-        setAcademy(academyData);
-        setUnits(unitsData);
+        const nextOverview = await getSettingsOverview();
+        setOverview(nextOverview);
       } catch (error) {
         console.error('[SettingsPage] Erro ao carregar dados:', error);
       } finally {
@@ -123,13 +112,15 @@ export default function SettingsPage() {
     loadData();
   }, []);
 
-  const hasIntegrationIssue = integrations.some((i) => i.status === 'error');
+  const { academy, units, team, integrations } = overview;
+  const hasIntegrationIssue = integrations.hasIssue;
+  const activeStaffCount = team.active;
 
   const settingsItems: SettingsItem[] = [
     {
       id: 'academy',
       title: 'Dados da Academia',
-      description: academy ? `${academy.tradeName}` : 'Carregando...',
+      description: academy ? academy.tradeName : loading ? 'Carregando...' : 'Academia não encontrada',
       href: '/settings/academy',
       icon: icons.building,
     },
@@ -143,7 +134,9 @@ export default function SettingsPage() {
     {
       id: 'team',
       title: 'Equipe',
-      description: `${staff.filter((s) => s.status === 'active').length} membro${staff.filter((s) => s.status === 'active').length !== 1 ? 's' : ''} ativo${staff.filter((s) => s.status === 'active').length !== 1 ? 's' : ''}`,
+      description: team.hasError
+        ? 'Equipe indisponível no momento'
+        : `${activeStaffCount} membro${activeStaffCount !== 1 ? 's' : ''} ativo${activeStaffCount !== 1 ? 's' : ''}`,
       href: '/settings/team',
       icon: icons.users,
     },
@@ -157,7 +150,9 @@ export default function SettingsPage() {
     {
       id: 'integrations',
       title: 'Integrações',
-      description: 'Pagamentos e notificações',
+      description: integrations.total > 0
+        ? `${integrations.connected} ${integrations.connected === 1 ? 'integração conectada' : 'integrações conectadas'}`
+        : 'Pagamentos e notificações',
       href: '/settings/integrations',
       icon: icons.plug,
       badge: hasIntegrationIssue ? { label: 'Atenção', variant: 'warning' } : undefined,
