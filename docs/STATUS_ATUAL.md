@@ -16,14 +16,13 @@
 | Assinaturas | `/assinaturas`, `/assinaturas/[id]`, `/assinaturas/new` | Mock direto (`contractsMock`, `plansMock`, `usersMock`) | — | Não | Migrar assinatura/renovação/cancelamento para serviços reais |
 | Financeiro | `/financial`, `/financial/cobranca/[id]` | Mock direto (`financialMock`) | — | Não | Migrar cobranças, inadimplência e ações financeiras |
 | Onboarding staff | `/users/onboarding` | `lib/users/onboardingService` (draft real em `student_drafts` + publish via RPC) | — | 🟡 | Etapas de plano/pagamento/contrato ainda usam catálogo/UX local; validar ponta-a-ponta em STG com usuários reais |
-| Onboarding público | `/cadastro/[token]` | Mock direto (`onboardingMock`, `inviteMock`) | — | Não | Conectar validação de convite e cadastro ponta-a-ponta no Supabase |
+| Onboarding público | `/cadastro/[token]` | `lib/invites` (RPC Supabase: `get_invite_signup_context` + `finalize_invite_signup`) | — | 🟡 | Validar finalize ponta-a-ponta no STG após ajuste final na criação de usuário `auth.users` |
 | API interna (core) | `/api/auth/login`, `/api/user/[id]` | Estrutura clean architecture com retorno mock/exemplo | — | Parcial | Integrar casos de uso com repositórios reais Supabase |
 
 ---
 
 ## Páginas que ainda importam `src/mocks` diretamente
 
-- `src/app/cadastro/[token]/page.tsx`
 - `src/app/acesso/checkin/page.tsx`
 - `src/app/(protected)/scanner/page.tsx`
 - `src/app/(app)/settings/policies/page.tsx`
