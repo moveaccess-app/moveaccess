@@ -81,11 +81,11 @@
 ## Módulo: App (área autenticada — staff)
 
 ### `/home`
-**Status:** 🔴 Mock  
+**Status:** 🟡 Parcial (dados reais + placeholder de acessos)  
 **Rota:** `src/app/(app)/home/page.tsx`  
-**Mocks:** `homeMock.ts` — KPIs, alunos recent, próximos vencimentos  
-**Tabelas necessárias:** `student_profiles`, `student_unit_assignments`, `profiles`  
-**O que falta:** Queries agregadas de KPIs. A maioria dos dados já existe nas tabelas — só faltam as queries.  
+**Serviço:** `src/lib/home/homeService.ts` → `homeServiceSupabase.ts` (RPC `get_home_overview`)  
+**Tabelas usadas:** `academy_memberships`, `profiles`, `student_profiles`, `student_drafts`, `invite_links`, `units`  
+**O que falta:** bloco “Últimos acessos” permanece sem dados reais (placeholder estável) até criação de `access_logs`.  
 **Prioridade:** 🔥 Alta — primeira tela após o login
 
 ---

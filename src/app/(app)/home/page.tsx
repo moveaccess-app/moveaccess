@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/common/Header';
 import { Card } from '@/components/ui/Card';
@@ -14,7 +14,8 @@ import {
   type AccessType,
   type PriorityAlert,
   type AccessHistoryEntry,
-} from '@/mocks/homeMock';
+  type HomeData,
+} from '@/lib/home/homeService';
 
 // ============================================================================
 // ÍCONES SVG
@@ -160,7 +161,7 @@ function HealthMetricCard({ label, value, context }: {
 /**
  * Card de Acessos Recentes - Lista cronológica (máximo 4 itens, sem scroll)
  */
-function RecentAccessesCard({ accesses }: { accesses: AccessHistoryEntry[] }) {
+function RecentAccessesCard({ accesses, placeholder }: { accesses: AccessHistoryEntry[]; placeholder: string }) {
   const getAccessTypeConfig = (type: AccessType) => {
     const configs = {
       allowed: {
@@ -193,6 +194,11 @@ function RecentAccessesCard({ accesses }: { accesses: AccessHistoryEntry[] }) {
         </h3>
       </div>
       
+      {displayedAccesses.length === 0 ? (
+        <div className="p-6 text-center text-sm text-[var(--element-secondary)]">
+          {placeholder}
+        </div>
+      ) : (
       <div className="divide-y divide-[var(--divider-primary)]">
         {displayedAccesses.map((access) => {
           const config = getAccessTypeConfig(access.type);
@@ -228,6 +234,7 @@ function RecentAccessesCard({ accesses }: { accesses: AccessHistoryEntry[] }) {
           );
         })}
       </div>
+      )}
       
       <div className="px-5 py-3 border-t border-[var(--divider-primary)] bg-[var(--background-secondary)]">
         <Link href="/access/log">
@@ -288,7 +295,24 @@ function getGreeting(): string {
 
 export default function HomePage() {
   const { logout } = useAuth(); // Obter função de logout
-  const homeData = useMemo(() => getHomeData(), []);
+  const [homeData, setHomeData] = useState<HomeData | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const load = async () => {
+      const data = await getHomeData();
+      if (mounted) {
+        setHomeData(data);
+      }
+    };
+
+    void load();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const currentDate = new Date().toLocaleDateString('pt-BR', {
     weekday: 'long',
@@ -298,6 +322,24 @@ export default function HomePage() {
   
   const formattedDate = currentDate.charAt(0).toUpperCase() + currentDate.slice(1);
   const greeting = getGreeting();
+
+  if (!homeData) {
+    return (
+      <div className="flex flex-col h-full bg-[var(--background-secondary)]">
+        <Header
+          title="Início"
+          actions={
+            <Button onClick={logout} variant="outline" size="sm">
+              Sair
+            </Button>
+          }
+        />
+        <div className="flex-1 flex items-center justify-center text-[var(--element-secondary)]">
+          Carregando dados da Home...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-[var(--background-secondary)]">
@@ -349,18 +391,18 @@ export default function HomePage() {
               context={homeData.healthMetric.context}
             />
             
-            {/* KPI de Ações Rápidas - resumo compacto */}
+            {/* KPI operacional - resumo compacto */}
             <Card className="p-5 border border-[var(--divider-primary)]">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-[var(--element-secondary)] uppercase tracking-wide mb-1">
-                    Acessos hoje
+                    Operação hoje
                   </p>
                   <p className="text-2xl font-bold text-[var(--element-primary)]">
-                    {homeData.recentAccesses.length > 0 ? homeData.recentAccesses.length * 12 : 0}
+                    {homeData.kpis.openDrafts}
                   </p>
                   <p className="text-xs text-[var(--element-secondary)] mt-1">
-                    {homeData.recentAccesses.filter(a => a.type === 'denied').length} bloqueados
+                    {homeData.kpis.pendingInvites} convites ativos • {homeData.kpis.activeUnits} unidades ativas
                   </p>
                 </div>
                 <div className="p-2 rounded-lg bg-[var(--background-tertiary)] text-[var(--element-secondary)] flex-shrink-0">
@@ -371,7 +413,7 @@ export default function HomePage() {
           </div>
           
           {/* LINHA 3: HISTÓRICO DE ACESSOS */}
-          <RecentAccessesCard accesses={homeData.recentAccesses} />
+          <RecentAccessesCard accesses={homeData.recentAccesses} placeholder={homeData.accessPlaceholder} />
           
           {/* LINHA 4: AÇÕES RÁPIDAS */}
           <div>

@@ -1,11 +1,11 @@
-# STATUS ATUAL (DEV) — 2026-03-04
+# STATUS ATUAL (DEV) — 2026-03-05
 
 ## Baseline por módulo
 
 | Módulo | Tela/rota | Fonte atual (mock/service Supabase) | Feature flag | Pronto? | Pendências |
 |---|---|---|---|---|---|
 | Auth | `/login`, `/aluno/login`, guards (`AuthContext`) | `authService` (switch mock/Supabase) | `NEXT_PUBLIC_USE_SUPABASE_AUTH` | Parcial | Consolidar campos de perfil/tenancy vindos de Supabase em toda a sessão; validar fluxo convite/cadastro real |
-| Home | `/home` | Mock direto (`homeMock`) | — | Não | Migrar KPIs/alertas/histórico para service real |
+| Home | `/home` | `lib/home/homeService` + RPC `get_home_overview()` | — | 🟡 | Últimos acessos seguem placeholder estável até existir `access_logs` |
 | Usuários (lista) | `/users` | `usersService` (contrato canônico + switch) | `NEXT_PUBLIC_USE_SUPABASE_USERS` | ✅ | Listagem, busca e filtros em dados reais com flag ativa |
 | Usuários (detalhe) | `/users/[id]` | `usersService` (contrato canônico + placeholders estáveis) | `NEXT_PUBLIC_USE_SUPABASE_USERS` | 🟡 | Seções Access/Contracts/Financial/Documents seguem placeholders estáveis até backend completo |
 | Settings (academy/units) | `/settings`, `/settings/academy`, `/settings/units`, `/settings/units/[id]` | `lib/settings` + `teamService` (switch com placeholder estável para integrações) | `NEXT_PUBLIC_USE_SUPABASE_SETTINGS` | 🟡 | `/settings` já sem mock direto; integrações/audit/policies seguem sem backend real |
@@ -31,7 +31,6 @@
 - `src/app/(app)/plans/new/page.tsx`
 - `src/app/(app)/plans/[id]/page.tsx`
 - `src/app/(app)/plans/page.tsx`
-- `src/app/(app)/home/page.tsx`
 - `src/app/(app)/contratos/novo/page.tsx`
 - `src/app/(app)/contratos/[id]/page.tsx`
 - `src/app/(app)/contratos/page.tsx`
@@ -54,6 +53,7 @@
 | `src/lib/auth/authServiceSupabase.ts` | `src/lib/auth/authService.ts` | `src/contexts/AuthContext.tsx` (login/logout/session) e, por consequência, páginas com `useAuth` |
 | `src/lib/users/usersServiceSupabase.ts` | `src/lib/users/usersService.ts` (`src/lib/users/index.ts`) | `src/app/(app)/users/page.tsx`, `src/app/(app)/users/[id]/page.tsx` |
 | `student_drafts` + RPC `finalize_student_draft` (REST Supabase) | `src/lib/users/onboardingService.ts` (`src/lib/users/index.ts`) | `src/app/(app)/users/onboarding/page.tsx` |
+| `src/lib/home/homeServiceSupabase.ts` + RPC `get_home_overview()` | `src/lib/home/homeService.ts` (`src/lib/home/index.ts`) | `src/app/(app)/home/page.tsx` |
 | `src/lib/settings/settingsServiceSupabase.ts` | `src/lib/settings/settingsService.ts` (`src/lib/settings/index.ts`) | `src/app/(app)/settings/page.tsx`, `src/app/(app)/settings/academy/page.tsx`, `src/app/(app)/settings/units/page.tsx`, `src/app/(app)/settings/units/[id]/page.tsx` |
 | `src/lib/settings/teamServiceSupabase.ts` | `src/lib/settings/teamService.ts` | `src/app/(app)/settings/team/page.tsx` |
 
