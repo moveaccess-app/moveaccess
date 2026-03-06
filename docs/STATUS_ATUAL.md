@@ -6,8 +6,8 @@
 |---|---|---|---|---|---|
 | Auth | `/login`, `/aluno/login`, guards (`AuthContext`) | `authService` (switch mock/Supabase) | `NEXT_PUBLIC_USE_SUPABASE_AUTH` | Parcial | Consolidar campos de perfil/tenancy vindos de Supabase em toda a sessão; validar fluxo convite/cadastro real |
 | Home | `/home` | Mock direto (`homeMock`) | — | Não | Migrar KPIs/alertas/histórico para service real |
-| Usuários (lista) | `/users` | `usersService` (switch) | `NEXT_PUBLIC_USE_SUPABASE_USERS` | Parcial | Completar dados de access/contracts/finance/documentos no Supabase |
-| Usuários (detalhe) | `/users/[id]` | `usersService` + tipos helpers do mock | `NEXT_PUBLIC_USE_SUPABASE_USERS` | Parcial | Remover dependência residual de tipos mock e fechar gaps de dados |
+| Usuários (lista) | `/users` | `usersService` (contrato canônico + switch) | `NEXT_PUBLIC_USE_SUPABASE_USERS` | ✅ | Listagem, busca e filtros em dados reais com flag ativa |
+| Usuários (detalhe) | `/users/[id]` | `usersService` (contrato canônico + placeholders estáveis) | `NEXT_PUBLIC_USE_SUPABASE_USERS` | 🟡 | Seções Access/Contracts/Financial/Documents seguem placeholders estáveis até backend completo |
 | Settings (academy/units) | `/settings`, `/settings/academy`, `/settings/units`, `/settings/units/[id]` | `lib/settings` + `teamService` (switch com placeholder estável para integrações) | `NEXT_PUBLIC_USE_SUPABASE_SETTINGS` | 🟡 | `/settings` já sem mock direto; integrações/audit/policies seguem sem backend real |
 | Settings (team) | `/settings/team` | `teamService` (switch) | `NEXT_PUBLIC_USE_SUPABASE_SETTINGS` | Parcial | Validar CRUD completo com permissões reais e auditoria |
 | Access | `/access`, `/access/log`, `/access/releases`, `/acesso/checkin`, `/(protected)/scanner` | Mock direto (`accessMock`) | — | Não | Criar módulo service + regras reais de liberação/check-in |
@@ -25,7 +25,6 @@
 - `src/app/cadastro/[token]/page.tsx`
 - `src/app/acesso/checkin/page.tsx`
 - `src/app/(protected)/scanner/page.tsx`
-- `src/app/(app)/users/[id]/page.tsx`
 - `src/app/(app)/users/onboarding/page.tsx`
 - `src/app/(app)/settings/policies/page.tsx`
 - `src/app/(app)/settings/integrations/page.tsx`

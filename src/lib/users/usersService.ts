@@ -2,35 +2,22 @@
  * Users Service - Switch Layer
  * 
  * Alterna entre mock e Supabase baseado em feature flag.
- * Retorna o tipo User COMPLETO do mock (com campos default para Supabase).
- * Assim a UI não precisa ser alterada.
+ * Expõe contrato canônico da UI (sem tipos vindos de mocks).
  */
 
 import * as mockService from '@/mocks/usersMock';
-import type { User as MockUser, UserStatus } from '@/mocks/usersMock';
+import type { User as MockUser } from '@/mocks/usersMock';
 import * as supabaseService from './usersServiceSupabase';
+import type {
+  User,
+  UserStatus,
+  UsersListResult,
+} from './types';
 
 // Feature flag
 const USE_SUPABASE = process.env.NEXT_PUBLIC_USE_SUPABASE_USERS === 'true';
 
-// Re-export do tipo COMPLETO do mock (para a UI)
-export type { 
-  User, 
-  UserStatus, 
-  UserType,
-  AccessInfo,
-  PlanInfo,
-  FinancialInfo,
-  Contract,
-} from '@/mocks/usersMock';
-
-// Re-export formatters
-export { formatDate, formatDateTime, formatCurrency } from '@/mocks/usersMock';
-
-export interface UsersListResult {
-  users: MockUser[];
-  total: number;
-}
+export type * from './types';
 
 /**
  * Busca todos os alunos
@@ -45,7 +32,7 @@ export async function getUsers(): Promise<UsersListResult> {
   }
   
   return {
-    users: mockService.mockUsers,
+    users: mockService.mockUsers.map(adaptMockToCanonical),
     total: mockService.mockUsers.length,
   };
 }
@@ -53,13 +40,14 @@ export async function getUsers(): Promise<UsersListResult> {
 /**
  * Busca um aluno pelo ID
  */
-export async function getUserById(id: string): Promise<MockUser | null> {
+export async function getUserById(id: string): Promise<User | null> {
   if (USE_SUPABASE) {
     const user = await supabaseService.getUserById(id);
     return user ? adaptSupabaseToMock(user) : null;
   }
-  
-  return mockService.getUserById(id) || null;
+
+  const user = mockService.getUserById(id);
+  return user ? adaptMockToCanonical(user) : null;
 }
 
 /**
@@ -78,7 +66,7 @@ export async function filterUsersByStatus(
   
   const filtered = mockService.filterUsersByStatus(mockService.mockUsers, status);
   return {
-    users: filtered,
+    users: filtered.map(adaptMockToCanonical),
     total: filtered.length,
   };
 }
@@ -97,7 +85,7 @@ export async function searchUsers(query: string): Promise<UsersListResult> {
   
   const found = mockService.searchUsers(mockService.mockUsers, query);
   return {
-    users: found,
+    users: found.map(adaptMockToCanonical),
     total: found.length,
   };
 }
@@ -128,9 +116,38 @@ export async function searchAndFilterUsers(
   }
   
   return {
-    users: results,
+    users: results.map(adaptMockToCanonical),
     total: results.length,
   };
+}
+
+export function formatDate(dateString: string | null): string {
+  if (!dateString || dateString === '-') return '-';
+  const date = new Date(dateString);
+  return date.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
+export function formatDateTime(dateTimeString: string | null): string {
+  if (!dateTimeString || dateTimeString === '-') return '-';
+  const date = new Date(dateTimeString);
+  return date.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+export function formatCurrency(value: number): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(value);
 }
 
 // ============================================================================
@@ -204,6 +221,28 @@ function adaptSupabaseToMock(user: supabaseService.User): MockUser {
     
     // Documentos: valores default (TODO: implementar módulo Documents)
     documents: [],
+  };
+}
+
+function adaptMockToCanonical(user: MockUser): User {
+  return {
+    ...user,
+    registrationId: user.registrationId || 'SEM-MATRICULA',
+    phone: user.phone || '',
+    document: user.document || '',
+    unitId: user.unitId || '',
+    unitName: user.unitName || 'Sem unidade',
+    statusSince: user.statusSince || user.createdAt,
+    statusHistory: user.statusHistory || [
+      {
+        status: user.status,
+        reason: user.statusReason || 'Status atual',
+        changedAt: user.createdAt,
+        changedBy: 'system',
+      },
+    ],
+    contracts: user.contracts || [],
+    documents: user.documents || [],
   };
 }
 

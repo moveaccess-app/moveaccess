@@ -13,8 +13,6 @@ import {
   type UserStatus,
   type ContractStatus,
   type FinancialStatus,
-} from '@/lib/users';
-import {
   type DigitalCardStatus,
   type DocumentStatus,
   type UserType,
@@ -23,7 +21,7 @@ import {
   type BillingType,
   type PaymentMethod,
   type StatusChangeSource,
-} from '@/mocks/usersMock';
+} from '@/lib/users';
 
 // ============================================
 // CORES DE STATUS
