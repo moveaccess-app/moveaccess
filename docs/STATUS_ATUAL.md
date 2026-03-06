@@ -9,7 +9,7 @@
 | Usuários (lista) | `/users` | `usersService` (contrato canônico + switch) | `NEXT_PUBLIC_USE_SUPABASE_USERS` | ✅ | Listagem, busca e filtros em dados reais com flag ativa |
 | Usuários (detalhe) | `/users/[id]` | `usersService` (contrato canônico + placeholders estáveis) | `NEXT_PUBLIC_USE_SUPABASE_USERS` | 🟡 | Seções Access/Contracts/Financial/Documents seguem placeholders estáveis até backend completo |
 | Settings (academy/units) | `/settings`, `/settings/academy`, `/settings/units`, `/settings/units/[id]` | `lib/settings` + `teamService` (switch com placeholder estável para integrações) | `NEXT_PUBLIC_USE_SUPABASE_SETTINGS` | 🟡 | `/settings` já sem mock direto; integrações/audit/policies seguem sem backend real |
-| Settings (team) | `/settings/team` | `teamService` (switch) | `NEXT_PUBLIC_USE_SUPABASE_SETTINGS` | Parcial | Validar CRUD completo com permissões reais e auditoria |
+| Settings (team) | `/settings/team` | `teamService` + RPCs Supabase (`get_team_staff_list`, `create_team_staff`, `update_team_staff`) | — | ✅ | CRUD principal real com guardas de tenancy e mutações admin-only |
 | Access | `/access`, `/access/log`, `/access/releases`, `/acesso/checkin`, `/(protected)/scanner` | Mock direto (`accessMock`) | — | Não | Criar módulo service + regras reais de liberação/check-in |
 | Plans | `/plans`, `/plans/[id]`, `/plans/new` | Mock direto (`plansMock`) | — | Não | Migrar catálogo de planos para Supabase |
 | Contratos | `/contratos`, `/contratos/[id]`, `/contratos/novo`, `/contratos/[id]/editar` | Mock direto (`contractTemplatesMock`) | — | Não | Migrar templates e variáveis de contrato para Supabase |

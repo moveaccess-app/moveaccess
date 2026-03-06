@@ -42,6 +42,15 @@ export interface TeamListResult {
   total: number;
 }
 
+export interface CreateStaffInput {
+  name: string;
+  email: string;
+  password: string;
+  phone?: string;
+  roleId?: RoleId;
+  unitIds?: string[];
+}
+
 // ============================================================================
 // HELPERS
 // ============================================================================
@@ -170,6 +179,12 @@ function dbRowToRole(row: DbRoleRow): Role {
   };
 }
 
+interface RpcMutationResult {
+  success: boolean;
+  error_code?: string;
+  detail?: string;
+}
+
 // ============================================================================
 // SERVIÇO
 // ============================================================================
@@ -187,7 +202,11 @@ export async function getStaffUsers(): Promise<StaffUser[]> {
   log('getStaffUsers()');
   
   const { data, error } = await fetchSupabase<DbStaffRow[]>(
-    'staff_list_view?select=*&order=name.asc'
+    'rpc/get_team_staff_list',
+    {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }
   );
   
   if (error || !data) {
@@ -206,17 +225,42 @@ export async function getStaffUsers(): Promise<StaffUser[]> {
  */
 export async function getStaffUserById(id: string): Promise<StaffUser | null> {
   log('getStaffUserById()', id);
-  
-  const { data, error } = await fetchSupabase<DbStaffRow[]>(
-    `staff_list_view?id=eq.${id}&select=*`
+
+  const staff = await getStaffUsers();
+  return staff.find((item) => item.id === id) ?? null;
+}
+
+export async function createStaffUser(
+  input: CreateStaffInput
+): Promise<{ success: boolean; error: string | null }> {
+  log('createStaffUser()', input.email);
+
+  const { data, error } = await fetchSupabase<RpcMutationResult | RpcMutationResult[]>(
+    'rpc/create_team_staff',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        p_name: input.name,
+        p_email: input.email,
+        p_password: input.password,
+        p_phone: input.phone ?? null,
+        p_role: input.roleId ?? 'receptionist',
+        p_unit_ids: input.unitIds ?? [],
+      }),
+    }
   );
-  
-  if (error || !data || data.length === 0) {
-    console.error('[TeamService] Erro ao buscar staff:', error);
-    return null;
+
+  if (error) {
+    return { success: false, error };
   }
-  
-  return dbRowToStaffUser(data[0]);
+
+  const payload = Array.isArray(data) ? data[0] : data;
+
+  if (!payload?.success) {
+    return { success: false, error: payload?.error_code || 'CREATE_FAILED' };
+  }
+
+  return { success: true, error: null };
 }
 
 /**
@@ -251,73 +295,28 @@ export async function updateStaffUser(
 ): Promise<{ success: boolean; error: string | null }> {
   log('updateStaffUser()', id, updates);
 
-  // 1. Atualizar staff_profiles (role, status)
-  if (updates.roleId !== undefined || updates.status !== undefined) {
-    const staffUpdates: Record<string, unknown> = {
-      updated_at: new Date().toISOString(),
-    };
-    
-    if (updates.roleId !== undefined) staffUpdates.role = updates.roleId;
-    if (updates.status !== undefined) staffUpdates.status = updates.status;
-
-    const { error } = await fetchSupabase(
-      `staff_profiles?id=eq.${id}`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify(staffUpdates),
-      }
-    );
-
-    if (error) {
-      return { success: false, error };
+  const { data, error } = await fetchSupabase<RpcMutationResult | RpcMutationResult[]>(
+    'rpc/update_team_staff',
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        p_staff_id: id,
+        p_role: updates.roleId ?? null,
+        p_status: updates.status ?? null,
+        p_phone: updates.phone ?? null,
+        p_unit_ids: updates.unitIds ?? null,
+      }),
     }
+  );
+
+  if (error) {
+    return { success: false, error };
   }
 
-  // 2. Atualizar profiles (phone)
-  if (updates.phone !== undefined) {
-    const { error } = await fetchSupabase(
-      `profiles?id=eq.${id}`,
-      {
-        method: 'PATCH',
-        body: JSON.stringify({ 
-          phone: updates.phone,
-          updated_at: new Date().toISOString(),
-        }),
-      }
-    );
+  const payload = Array.isArray(data) ? data[0] : data;
 
-    if (error) {
-      return { success: false, error };
-    }
-  }
-
-  // 3. Atualizar unit_assignments (se fornecido)
-  if (updates.unitIds !== undefined) {
-    // Primeiro, deletar todos os assignments existentes
-    await fetchSupabase(
-      `staff_unit_assignments?staff_id=eq.${id}`,
-      { method: 'DELETE' }
-    );
-
-    // Depois, inserir os novos
-    if (updates.unitIds.length > 0) {
-      const assignments = updates.unitIds.map(unitId => ({
-        staff_id: id,
-        unit_id: unitId,
-      }));
-
-      const { error } = await fetchSupabase(
-        'staff_unit_assignments',
-        {
-          method: 'POST',
-          body: JSON.stringify(assignments),
-        }
-      );
-
-      if (error) {
-        return { success: false, error };
-      }
-    }
+  if (!payload?.success) {
+    return { success: false, error: payload?.error_code || 'UPDATE_FAILED' };
   }
 
   log('updateStaffUser() -> sucesso');

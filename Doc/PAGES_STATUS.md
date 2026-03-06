@@ -299,14 +299,12 @@
 ---
 
 ### `/settings/team`
-**Status:** 🟡 Parcial  
+**Status:** ✅ Real  
 **Rota:** `src/app/(app)/settings/team/page.tsx`  
-**Serviço:** `lib/settings/teamService.ts` → feature flag `USE_SUPABASE_SETTINGS`  
-**Quando real:** `teamServiceSupabase.ts` — lê `staff_with_role` view  
-**Quando mock:** Adaptador sobre `settingsMock.ts`  
-**Tabelas:** `profiles`, `staff_profiles`, `staff_unit_assignments`, `roles`  
-**View disponível:** `staff_with_role`, `staff_list_view` ✅  
-**O que falta:** Ativar a feature flag. Implementação Supabase existe.  
+**Serviço:** `lib/settings/teamService.ts` → `teamServiceSupabase.ts` (sem fallback mock)  
+**RPCs:** `get_team_staff_list`, `create_team_staff`, `update_team_staff`  
+**Tabelas:** `profiles`, `staff_profiles`, `staff_unit_assignments`, `academy_memberships`, `roles`, `units`, `auth.users`  
+**Segurança:** tenancy por academy + mutações permitidas apenas para admin via guardas no banco  
 **Prioridade:** 🔥 Alta
 
 ---
@@ -364,12 +362,12 @@
 | `academies` | `/settings/academy` ✅ |
 | `units` | `/settings/units/*` ✅ |
 | `profiles` | Auth, Users, Settings ✅ |
-| `staff_profiles` | `/settings/team` 🟡 |
+| `staff_profiles` | `/settings/team` ✅ |
 | `student_profiles` | `/users`, `/users/[id]` 🟡 |
 | `academy_memberships` | Auth, Settings ✅ |
 | `student_unit_assignments` | Users 🟡 |
-| `staff_unit_assignments` | Team 🟡 |
-| `roles` | Team 🟡 |
+| `staff_unit_assignments` | Team ✅ |
+| `roles` | Team ✅ |
 | `invites` | Onboarding 🔴 |
 | `invite_links` | Onboarding 🔴 |
 | `student_drafts` | Onboarding 🔴 |

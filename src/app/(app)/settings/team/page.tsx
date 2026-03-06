@@ -12,6 +12,7 @@ import {
   getStaffUsers,
   getRoles,
   getUnits,
+  createStaffUser,
   updateStaffUser,
   toggleStaffStatus,
   type StaffUser,
@@ -20,6 +21,10 @@ import {
   type Role,
 } from '@/lib/settings/teamService';
 import type { Unit } from '@/lib/settings/settingsService';
+
+type StaffSavePayload = Partial<StaffUser> & {
+  password?: string;
+};
 
 const ROLE_LABELS: Record<RoleId, { label: string; description: string; color: string }> = {
   admin: { label: 'Administrador', description: 'Acesso total ao sistema', color: 'bg-purple-100 text-purple-800' },
@@ -106,7 +111,7 @@ function StaffModal({
   onClose,
 }: {
   staff: StaffUser | null;
-  onSave: (data: Partial<StaffUser>) => Promise<void>;
+  onSave: (data: StaffSavePayload) => Promise<void>;
   onClose: () => void;
 }) {
   const isNew = !staff;
@@ -117,6 +122,7 @@ function StaffModal({
   const [formData, setFormData] = useState({
     name: staff?.name || '',
     email: staff?.email || '',
+    password: '',
     phone: staff?.phone || '',
     roleId: staff?.roleId || 'receptionist' as RoleId,
     unitIds: staff?.unitIds || [] as string[],
@@ -146,6 +152,7 @@ function StaffModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.email) return;
+    if (isNew && formData.password.length < 6) return;
     
     setIsSaving(true);
     try {
@@ -192,6 +199,21 @@ function StaffModal({
               required
             />
           </div>
+
+          {isNew && (
+            <div>
+              <Label htmlFor="password">Senha inicial</Label>
+              <Input
+                id="password"
+                type="password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                placeholder="Mínimo 6 caracteres"
+                minLength={6}
+                required
+              />
+            </div>
+          )}
 
           <div>
             <Label htmlFor="phone">Telefone</Label>
@@ -302,16 +324,29 @@ export default function TeamPage() {
 
   const activeCount = staffList.filter((s) => s.status === 'active').length;
 
-  const handleSave = async (data: Partial<StaffUser>) => {
+  const handleSave = async (data: StaffSavePayload) => {
     if (editingStaff) {
       const result = await updateStaffUser(editingStaff.id, data);
       if (result.error) {
         console.error('[TeamPage] Erro ao atualizar membro:', result.error);
         return;
       }
+    } else {
+      const result = await createStaffUser({
+        name: data.name || '',
+        email: data.email || '',
+        password: data.password || '',
+        phone: data.phone || undefined,
+        roleId: data.roleId,
+        unitIds: data.unitIds,
+      });
+
+      if (result.error) {
+        console.error('[TeamPage] Erro ao criar membro:', result.error);
+        return;
+      }
     }
-    // Nota: createStaffUser não está implementado em Supabase ainda (TODO: futuro)
-    // Para novo membro, por enquanto só fecha o modal
+
     await loadStaffList();
     setEditingStaff(null);
     setIsCreating(false);
