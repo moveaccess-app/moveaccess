@@ -3,3 +3,5 @@
  */
 
 export * from './usersService';
+export * from './onboardingTypes';
+export * from './onboardingService';

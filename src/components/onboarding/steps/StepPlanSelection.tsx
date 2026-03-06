@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { Button, Card, Badge } from '@/components/ui';
-import { OnboardingSession } from '@/mocks/onboardingMock';
+import { OnboardingSession } from '@/lib/users';
 import { 
   getPublicCatalogPlans, 
   formatPrice,

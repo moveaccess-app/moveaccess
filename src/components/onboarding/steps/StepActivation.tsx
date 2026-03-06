@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Button, Card } from '@/components/ui';
-import { OnboardingSession } from '@/mocks/onboardingMock';
+import { OnboardingSession } from '@/lib/users';
 
 interface StepActivationProps {
   session: OnboardingSession;

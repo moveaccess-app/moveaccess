@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Button, Input, Label } from '@/components/ui';
-import { OnboardingSession } from '@/mocks/onboardingMock';
+import { OnboardingSession } from '@/lib/users';
 
 interface StepPersonalDataProps {
   session: OnboardingSession;

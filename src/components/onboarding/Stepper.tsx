@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { OnboardingStepInfo, StepStatus } from '@/mocks/onboardingMock';
+import { OnboardingStepInfo, StepStatus } from '@/lib/users';
 
 // ============================================
 // TIPOS

@@ -15,7 +15,8 @@
 | Contratos | `/contratos`, `/contratos/[id]`, `/contratos/novo`, `/contratos/[id]/editar` | Mock direto (`contractTemplatesMock`) | — | Não | Migrar templates e variáveis de contrato para Supabase |
 | Assinaturas | `/assinaturas`, `/assinaturas/[id]`, `/assinaturas/new` | Mock direto (`contractsMock`, `plansMock`, `usersMock`) | — | Não | Migrar assinatura/renovação/cancelamento para serviços reais |
 | Financeiro | `/financial`, `/financial/cobranca/[id]` | Mock direto (`financialMock`) | — | Não | Migrar cobranças, inadimplência e ações financeiras |
-| Onboarding/Cadastro | `/users/onboarding`, `/cadastro/[token]` | Mock direto (`onboardingMock`, `inviteMock`) | — | Não | Conectar validação de convite e cadastro ponta-a-ponta no Supabase |
+| Onboarding staff | `/users/onboarding` | `lib/users/onboardingService` (draft real em `student_drafts` + publish via RPC) | — | 🟡 | Etapas de plano/pagamento/contrato ainda usam catálogo/UX local; validar ponta-a-ponta em STG com usuários reais |
+| Onboarding público | `/cadastro/[token]` | Mock direto (`onboardingMock`, `inviteMock`) | — | Não | Conectar validação de convite e cadastro ponta-a-ponta no Supabase |
 | API interna (core) | `/api/auth/login`, `/api/user/[id]` | Estrutura clean architecture com retorno mock/exemplo | — | Parcial | Integrar casos de uso com repositórios reais Supabase |
 
 ---
@@ -25,7 +26,6 @@
 - `src/app/cadastro/[token]/page.tsx`
 - `src/app/acesso/checkin/page.tsx`
 - `src/app/(protected)/scanner/page.tsx`
-- `src/app/(app)/users/onboarding/page.tsx`
 - `src/app/(app)/settings/policies/page.tsx`
 - `src/app/(app)/settings/integrations/page.tsx`
 - `src/app/(app)/settings/audit/page.tsx`
@@ -54,6 +54,7 @@
 |---|---|---|
 | `src/lib/auth/authServiceSupabase.ts` | `src/lib/auth/authService.ts` | `src/contexts/AuthContext.tsx` (login/logout/session) e, por consequência, páginas com `useAuth` |
 | `src/lib/users/usersServiceSupabase.ts` | `src/lib/users/usersService.ts` (`src/lib/users/index.ts`) | `src/app/(app)/users/page.tsx`, `src/app/(app)/users/[id]/page.tsx` |
+| `student_drafts` + RPC `finalize_student_draft` (REST Supabase) | `src/lib/users/onboardingService.ts` (`src/lib/users/index.ts`) | `src/app/(app)/users/onboarding/page.tsx` |
 | `src/lib/settings/settingsServiceSupabase.ts` | `src/lib/settings/settingsService.ts` (`src/lib/settings/index.ts`) | `src/app/(app)/settings/page.tsx`, `src/app/(app)/settings/academy/page.tsx`, `src/app/(app)/settings/units/page.tsx`, `src/app/(app)/settings/units/[id]/page.tsx` |
 | `src/lib/settings/teamServiceSupabase.ts` | `src/lib/settings/teamService.ts` | `src/app/(app)/settings/team/page.tsx` |
 

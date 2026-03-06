@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card, Button } from '@/components/ui';
 import { 
@@ -14,14 +14,17 @@ import {
   StepActivation,
 } from '@/components/onboarding';
 import {
-  OnboardingSession,
-  OnboardingStep,
-  createNewOnboardingSession,
+  abandonOnboardingSession,
+  finalizeOnboardingDraft,
   getNextStep,
   getPreviousStep,
   getStepIndex,
+  initOrResumeOnboardingSession,
   ONBOARDING_STEPS,
-} from '@/mocks/onboardingMock';
+  OnboardingSession,
+  OnboardingStep,
+  updateDraftSession,
+} from '@/lib/users';
 
 // ============================================
 // ICONS
@@ -49,141 +52,202 @@ function PauseIcon({ className }: { className?: string }) {
 
 export default function OnboardingPage() {
   const router = useRouter();
-  
-  // Criar nova sessão de onboarding
-  const [session, setSession] = useState<OnboardingSession>(() => 
-    createNewOnboardingSession('unit-1', 'academy')
-  );
+  const [session, setSession] = useState<OnboardingSession | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   const [showPauseConfirm, setShowPauseConfirm] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
-  const currentStepIndex = getStepIndex(session.currentStep);
-  const currentStepInfo = session.steps[currentStepIndex];
+  useEffect(() => {
+    let mounted = true;
 
-  // Avançar para próximo step
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const goToNextStep = useCallback((stepData: any) => {
+    const loadSession = async () => {
+      try {
+        const loadedSession = await initOrResumeOnboardingSession();
+        if (!mounted) return;
+        setSession(loadedSession);
+      } catch (error) {
+        if (!mounted) return;
+        setErrorMessage(error instanceof Error ? error.message : 'Falha ao iniciar onboarding');
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadSession();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const currentStepIndex = useMemo(() => {
+    if (!session) return 0;
+    return getStepIndex(session.currentStep);
+  }, [session]);
+
+  const currentStepInfo = session?.steps[currentStepIndex];
+
+  const goToNextStep = async (stepData: unknown) => {
+    if (!session) return;
+
     const nextStep = getNextStep(session.currentStep);
-    
-    setSession(prev => {
-      const updatedSteps = prev.steps.map((step) => {
-        if (step.id === prev.currentStep) {
-          return { ...step, status: 'completed' as const, completedAt: new Date().toISOString() };
-        }
-        if (nextStep && step.id === nextStep) {
-          return { ...step, status: 'current' as const };
-        }
-        return step;
+    const updatedCollectedData = { ...session.collectedData };
+
+    switch (session.currentStep) {
+      case 'identification':
+        updatedCollectedData.identification = stepData as OnboardingSession['collectedData']['identification'];
+        break;
+      case 'personal_data':
+        updatedCollectedData.personalData = stepData as OnboardingSession['collectedData']['personalData'];
+        break;
+      case 'plan_selection':
+        updatedCollectedData.planSelection = stepData as OnboardingSession['collectedData']['planSelection'];
+        break;
+      case 'contract':
+        updatedCollectedData.contract = stepData as OnboardingSession['collectedData']['contract'];
+        break;
+      case 'payment':
+        updatedCollectedData.payment = stepData as OnboardingSession['collectedData']['payment'];
+        break;
+      case 'activation':
+        updatedCollectedData.activation = stepData as OnboardingSession['collectedData']['activation'];
+        break;
+    }
+
+    try {
+      setIsSaving(true);
+      setErrorMessage(null);
+
+      const updatedSession = await updateDraftSession(session.id, {
+        currentStep: nextStep ?? session.currentStep,
+        status: nextStep ? 'in_progress' : 'completed',
+        collectedData: updatedCollectedData,
+        completedAt: nextStep ? null : new Date().toISOString(),
       });
 
-      const updatedCollectedData = { ...prev.collectedData };
-      
-      // Atualizar dados coletados baseado no step atual
-      switch (prev.currentStep) {
-        case 'identification':
-          updatedCollectedData.identification = stepData as OnboardingSession['collectedData']['identification'];
-          break;
-        case 'personal_data':
-          updatedCollectedData.personalData = stepData as OnboardingSession['collectedData']['personalData'];
-          break;
-        case 'plan_selection':
-          updatedCollectedData.planSelection = stepData as OnboardingSession['collectedData']['planSelection'];
-          break;
-        case 'contract':
-          updatedCollectedData.contract = stepData as OnboardingSession['collectedData']['contract'];
-          break;
-        case 'payment':
-          updatedCollectedData.payment = stepData as OnboardingSession['collectedData']['payment'];
-          break;
-        case 'activation':
-          updatedCollectedData.activation = stepData as OnboardingSession['collectedData']['activation'];
-          break;
-      }
+      setSession(updatedSession);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Falha ao salvar etapa');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
-      return {
-        ...prev,
-        currentStep: nextStep || prev.currentStep,
-        steps: updatedSteps,
-        collectedData: updatedCollectedData,
-        updatedAt: new Date().toISOString(),
-        status: !nextStep ? 'completed' : 'in_progress',
-        completedAt: !nextStep ? new Date().toISOString() : undefined,
-      };
-    });
-  }, [session.currentStep]);
+  const goToPreviousStep = async () => {
+    if (!session) return;
 
-  // Voltar para step anterior
-  const goToPreviousStep = useCallback(() => {
     const prevStep = getPreviousStep(session.currentStep);
     if (!prevStep) return;
 
-    setSession(prev => {
-      const updatedSteps = prev.steps.map(step => {
-        if (step.id === prev.currentStep) {
-          return { ...step, status: 'pending' as const };
-        }
-        if (step.id === prevStep) {
-          return { ...step, status: 'current' as const, completedAt: undefined };
-        }
-        return step;
+    try {
+      setIsSaving(true);
+      setErrorMessage(null);
+
+      const updatedSession = await updateDraftSession(session.id, {
+        currentStep: prevStep,
+        status: 'in_progress',
+        collectedData: session.collectedData,
+        completedAt: null,
       });
 
-      return {
-        ...prev,
-        currentStep: prevStep,
-        steps: updatedSteps,
-        updatedAt: new Date().toISOString(),
-      };
-    });
-  }, [session.currentStep]);
+      setSession(updatedSession);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Falha ao voltar etapa');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
-  // Navegar para step específico (apenas steps completos)
-  const goToStep = useCallback((stepId: string) => {
+  const goToStep = async (stepId: string) => {
+    if (!session) return;
+
     const targetStep = session.steps.find(s => s.id === stepId);
     if (!targetStep || targetStep.status !== 'completed') return;
 
-    setSession(prev => {
-      const updatedSteps = prev.steps.map(step => {
-        if (step.id === prev.currentStep) {
-          return { ...step, status: 'pending' as const };
-        }
-        if (step.id === stepId) {
-          return { ...step, status: 'current' as const };
-        }
-        return step;
+    try {
+      setIsSaving(true);
+      setErrorMessage(null);
+
+      const updatedSession = await updateDraftSession(session.id, {
+        currentStep: stepId as OnboardingStep,
+        status: 'in_progress',
+        collectedData: session.collectedData,
+        completedAt: session.completedAt || null,
       });
 
-      return {
-        ...prev,
-        currentStep: stepId as OnboardingStep,
-        steps: updatedSteps,
-        updatedAt: new Date().toISOString(),
-      };
-    });
-  }, [session.steps]);
+      setSession(updatedSession);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Falha ao navegar para etapa');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
-  // Pausar onboarding
   const handlePause = () => {
-    // Em produção: salvar estado no backend
-    console.log('Onboarding pausado:', session);
+    setShowPauseConfirm(false);
     router.push('/users');
   };
 
-  // Cancelar onboarding
-  const handleCancel = () => {
-    // Em produção: atualizar status para abandoned
+  const handleCancel = async () => {
+    if (!session) return;
+
+    try {
+      setIsSaving(true);
+      await abandonOnboardingSession(session.id);
+      router.push('/users');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Falha ao cancelar onboarding');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleComplete = async () => {
+    if (!session) return;
+
+    try {
+      setIsSaving(true);
+      setErrorMessage(null);
+      await finalizeOnboardingDraft(session.id);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Falha ao concluir onboarding');
+      return;
+    } finally {
+      setIsSaving(false);
+    }
+
     router.push('/users');
   };
 
-  // Concluir onboarding
-  const handleComplete = () => {
-    // Em produção: salvar usuário completo no backend
-    console.log('Onboarding concluído:', session);
-    router.push('/users');
-  };
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[var(--background-secondary)] flex items-center justify-center">
+        <Card className="p-6">
+          <p className="text-sm text-[var(--text-secondary)]">Carregando onboarding...</p>
+        </Card>
+      </div>
+    );
+  }
 
-  // Renderizar step atual
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-[var(--background-secondary)] flex items-center justify-center">
+        <Card className="p-6 max-w-md">
+          <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-2">Não foi possível iniciar o cadastro</h2>
+          <p className="text-sm text-[var(--text-secondary)]">{errorMessage || 'Tente novamente em instantes.'}</p>
+          <div className="mt-4">
+            <Button onClick={() => router.push('/users')}>Voltar para usuários</Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   const renderCurrentStep = () => {
     switch (session.currentStep) {
       case 'identification':
@@ -230,9 +294,9 @@ export default function OnboardingPage() {
         return (
           <StepActivation
             session={session}
-            onComplete={(data) => {
-              goToNextStep(data as Record<string, unknown>);
-              handleComplete();
+            onComplete={async (data) => {
+              await goToNextStep(data);
+              await handleComplete();
             }}
             onBack={goToPreviousStep}
           />
@@ -253,7 +317,7 @@ export default function OnboardingPage() {
                 Novo Cadastro
               </h1>
               <p className="text-sm text-[var(--text-tertiary)]">
-                {currentStepInfo?.title} • Etapa {currentStepIndex + 1} de {ONBOARDING_STEPS.length}
+                {currentStepInfo?.title || 'Onboarding'} • Etapa {currentStepIndex + 1} de {ONBOARDING_STEPS.length}
               </p>
             </div>
             
@@ -262,6 +326,7 @@ export default function OnboardingPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowPauseConfirm(true)}
+                disabled={isSaving}
                 className="text-[var(--text-secondary)]"
               >
                 <PauseIcon className="w-4 h-4 mr-1" />
@@ -271,6 +336,7 @@ export default function OnboardingPage() {
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowCancelConfirm(true)}
+                disabled={isSaving}
                 className="text-[var(--text-secondary)]"
               >
                 <XIcon className="w-4 h-4" />
@@ -285,6 +351,10 @@ export default function OnboardingPage() {
               total={ONBOARDING_STEPS.length} 
             />
           </div>
+
+          {errorMessage && (
+            <p className="mt-3 text-xs text-[var(--status-negative)]">{errorMessage}</p>
+          )}
         </div>
       </header>
 
@@ -297,7 +367,9 @@ export default function OnboardingPage() {
               <Stepper
                 steps={session.steps}
                 currentStep={session.currentStep}
-                onStepClick={goToStep}
+                onStepClick={(stepId) => {
+                  void goToStep(stepId);
+                }}
                 orientation="vertical"
               />
             </div>
@@ -329,7 +401,7 @@ export default function OnboardingPage() {
               <Button variant="ghost" onClick={() => setShowPauseConfirm(false)}>
                 Continuar cadastro
               </Button>
-              <Button onClick={handlePause}>
+                <Button onClick={handlePause} disabled={isSaving}>
                 Pausar e sair
               </Button>
             </div>
@@ -351,7 +423,7 @@ export default function OnboardingPage() {
               <Button variant="ghost" onClick={() => setShowCancelConfirm(false)}>
                 Voltar
               </Button>
-              <Button variant="destructive" onClick={handleCancel}>
+                <Button variant="destructive" onClick={() => void handleCancel()} disabled={isSaving}>
                 Cancelar cadastro
               </Button>
             </div>

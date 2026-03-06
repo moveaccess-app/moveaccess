@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Button, Card, Input, Label } from '@/components/ui';
-import { OnboardingSession } from '@/mocks/onboardingMock';
+import { OnboardingSession } from '@/lib/users';
 import { cn } from '@/lib/utils';
 
 interface StepPaymentProps {
