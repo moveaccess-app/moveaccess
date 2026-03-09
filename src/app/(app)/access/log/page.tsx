@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/common/Header';
 import { Card } from '@/components/ui/Card';
@@ -8,17 +8,18 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import {
-  filterAccessHistory,
+  getAccessLogs,
+  getAccessUnits,
   formatAccessDateTime,
   formatCpfMasked,
   getAccessMethodLabel,
   getAccessStatusLabel,
   getDenialReasonMessage,
-  mockUnits,
   type AccessAttempt,
   type AccessStatus,
   type AccessMethod,
-} from '@/mocks/accessMock';
+  type AccessUnit,
+} from '@/lib/access/accessService';
 
 // Ícones inline
 const icons = {
@@ -74,13 +75,16 @@ const STATUS_OPTIONS: { value: AccessStatus | ''; label: string }[] = [
 
 const METHOD_OPTIONS: { value: AccessMethod | ''; label: string }[] = [
   { value: '', label: 'Todos Métodos' },
-  { value: 'qr_code', label: 'QR Code' },
-  { value: 'pin', label: 'PIN' },
+  { value: 'qr', label: 'QR' },
   { value: 'manual', label: 'Manual' },
-  { value: 'biometria', label: 'Biometria' },
+  { value: 'scanner', label: 'Scanner' },
 ];
 
 export default function AccessLogPage() {
+  const [logs, setLogs] = useState<AccessAttempt[]>([]);
+  const [units, setUnits] = useState<AccessUnit[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
   // Filters
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<AccessStatus | ''>('');
@@ -91,15 +95,30 @@ export default function AccessLogPage() {
   // Pagination
   const [page, setPage] = useState(1);
 
-  // Filter & paginate data
-  const filteredData = useMemo(() => {
-    return filterAccessHistory({
-      status: statusFilter || undefined,
-      method: methodFilter || undefined,
-      unitId: unitFilter || undefined,
-      search: search || undefined,
-    });
+  useEffect(() => {
+    async function loadData() {
+      setIsLoading(true);
+
+      const [logsData, unitsData] = await Promise.all([
+        getAccessLogs({
+          status: statusFilter || undefined,
+          method: methodFilter || undefined,
+          unitId: unitFilter || undefined,
+          search: search || undefined,
+          limit: 500,
+        }),
+        getAccessUnits(),
+      ]);
+
+      setLogs(logsData);
+      setUnits(unitsData);
+      setIsLoading(false);
+    }
+
+    loadData();
   }, [search, statusFilter, methodFilter, unitFilter]);
+
+  const filteredData = useMemo(() => logs, [logs]);
 
   const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
   const paginatedData = useMemo(() => {
@@ -233,7 +252,7 @@ export default function AccessLogPage() {
                   className="px-3 py-2 rounded-lg border border-[var(--divider-secondary)] bg-[var(--background-primary)] text-sm text-[var(--element-primary)]"
                 >
                   <option value="">Todas Unidades</option>
-                  {mockUnits.map((unit) => (
+                  {units.map((unit) => (
                     <option key={unit.id} value={unit.id}>
                       {unit.name}
                     </option>
@@ -258,7 +277,7 @@ export default function AccessLogPage() {
         {/* Results Count */}
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm text-[var(--element-secondary)]">
-            {filteredData.length} registro(s) encontrado(s)
+            {isLoading ? 'Carregando registros...' : `${filteredData.length} registro(s) encontrado(s)`}
           </p>
         </div>
 
@@ -300,7 +319,7 @@ export default function AccessLogPage() {
           </div>
 
           {/* Empty State */}
-          {paginatedData.length === 0 && (
+          {!isLoading && paginatedData.length === 0 && (
             <div className="text-center py-12">
               <p className="text-[var(--element-secondary)]">
                 Nenhum registro encontrado.

@@ -10,7 +10,7 @@
 | Usuários (detalhe) | `/users/[id]` | `usersService` (contrato canônico + placeholders estáveis) | `NEXT_PUBLIC_USE_SUPABASE_USERS` | 🟡 | Seções Access/Contracts/Financial/Documents seguem placeholders estáveis até backend completo |
 | Settings (academy/units) | `/settings`, `/settings/academy`, `/settings/units`, `/settings/units/[id]` | `lib/settings` + `teamService` (switch com placeholder estável para integrações) | `NEXT_PUBLIC_USE_SUPABASE_SETTINGS` | 🟡 | `/settings` já sem mock direto; integrações/audit/policies seguem sem backend real |
 | Settings (team) | `/settings/team` | `teamService` + RPCs Supabase (`get_team_staff_list`, `create_team_staff`, `update_team_staff`) | — | ✅ | CRUD principal real com guardas de tenancy e mutações admin-only |
-| Access | `/access`, `/access/log`, `/access/releases`, `/acesso/checkin`, `/(protected)/scanner` | Mock direto (`accessMock`) | — | Não | Criar módulo service + regras reais de liberação/check-in |
+| Access | `/access`, `/access/log`, `/acesso/checkin` via `lib/access` + migration `access_logs`; `/access/releases` e `/(protected)/scanner` ainda mock | — | 🟡 | MVP local pronto; aplicar/validar no STG correto e depois sincronizar PRD |
 | Plans | `/plans`, `/plans/[id]`, `/plans/new` | Mock direto (`plansMock`) | — | Não | Migrar catálogo de planos para Supabase |
 | Contratos | `/contratos`, `/contratos/[id]`, `/contratos/novo`, `/contratos/[id]/editar` | Mock direto (`contractTemplatesMock`) | — | Não | Migrar templates e variáveis de contrato para Supabase |
 | Assinaturas | `/assinaturas`, `/assinaturas/[id]`, `/assinaturas/new` | Mock direto (`contractsMock`, `plansMock`, `usersMock`) | — | Não | Migrar assinatura/renovação/cancelamento para serviços reais |
@@ -23,7 +23,6 @@
 
 ## Páginas que ainda importam `src/mocks` diretamente
 
-- `src/app/acesso/checkin/page.tsx`
 - `src/app/(protected)/scanner/page.tsx`
 - `src/app/(app)/settings/policies/page.tsx`
 - `src/app/(app)/settings/integrations/page.tsx`
@@ -40,8 +39,6 @@
 - `src/app/(app)/assinaturas/page.tsx`
 - `src/app/(app)/assinaturas/[id]/page.tsx`
 - `src/app/(app)/assinaturas/new/page.tsx`
-- `src/app/(app)/access/log/page.tsx`
-- `src/app/(app)/access/page.tsx`
 - `src/app/(app)/access/releases/page.tsx`
 
 ---
@@ -56,6 +53,7 @@
 | `src/lib/home/homeServiceSupabase.ts` + RPC `get_home_overview()` | `src/lib/home/homeService.ts` (`src/lib/home/index.ts`) | `src/app/(app)/home/page.tsx` |
 | `src/lib/settings/settingsServiceSupabase.ts` | `src/lib/settings/settingsService.ts` (`src/lib/settings/index.ts`) | `src/app/(app)/settings/page.tsx`, `src/app/(app)/settings/academy/page.tsx`, `src/app/(app)/settings/units/page.tsx`, `src/app/(app)/settings/units/[id]/page.tsx` |
 | `src/lib/settings/teamServiceSupabase.ts` | `src/lib/settings/teamService.ts` | `src/app/(app)/settings/team/page.tsx` |
+| `src/lib/access/accessServiceSupabase.ts` + RPCs `process_checkin`, `process_checkin_by_identifier` | `src/lib/access/accessService.ts` (`src/lib/access/index.ts`) | `src/app/acesso/checkin/page.tsx`, `src/app/(app)/access/page.tsx`, `src/app/(app)/access/log/page.tsx` |
 
 ---
 

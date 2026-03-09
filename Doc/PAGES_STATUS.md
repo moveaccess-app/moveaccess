@@ -23,9 +23,9 @@
 | Status | Quantidade |
 |--------|-----------|
 | ✅ Real | 5 |
-| 🟡 Parcial | 4 |
+| 🟡 Parcial | 7 |
 | 🔴 Mock (pode migrar logo) | 12 |
-| 🚫 Sem backend (requer modelagem) | 11 |
+| 🚫 Sem backend (requer modelagem) | 8 |
 | ⚙️ Sem banco | 2 |
 | 🗑️ Descartada | 4 |
 
@@ -71,10 +71,11 @@
 ---
 
 ### `/acesso/checkin`
-**Status:** 🚫 Mock + Sem tabela  
+**Status:** 🟡 Parcial (MVP local pronto, aplicação STG pendente)  
 **Rota:** `src/app/acesso/checkin/page.tsx`  
-**Mocks:** `accessMock.ts` (`mockUnits`)  
-**O que falta:** Tabela de check-in / validação de acesso no banco. A lógica de validação existe parcialmente em `accessMock.ts`. Requer modelagem de tabela `access_logs`.
+**Serviço:** `src/lib/access/accessService.ts` → `accessServiceSupabase.ts`  
+**Banco previsto:** migration `20260309000100_access_logs_mvp.sql` com `access_logs` + RPC `process_checkin`  
+**O que falta:** aplicar/validar a migration no STG correto e sincronizar PRD. O fluxo público antigo por PIN/OTP foi reduzido para MVP manual operado por staff autenticado.
 
 ---
 
@@ -126,19 +127,21 @@
 ## Módulo: Acesso
 
 ### `/access` (dashboard)
-**Status:** 🚫 Mock + Sem tabela  
+**Status:** 🟡 Parcial (MVP local pronto, aplicação STG pendente)  
 **Rota:** `src/app/(app)/access/page.tsx`  
-**Mocks:** `accessMock.ts` — histórico de acessos, status da academia  
-**O que falta:** Tabela `access_logs` no banco. Toda a lógica de validação de QR Code + registro de entrada/saída.  
+**Serviço:** `src/lib/access/accessService.ts` → `getAccessOverview()`  
+**Banco previsto:** `access_logs`  
+**O que falta:** aplicar a migration no STG correto para ativar contagem do dia e últimos logs reais.  
 **Prioridade:** 🟠 Média (depende de modelagem)
 
 ---
 
 ### `/access/log`
-**Status:** 🚫 Mock + Sem tabela  
+**Status:** 🟡 Parcial (MVP local pronto, aplicação STG pendente)  
 **Rota:** `src/app/(app)/access/log/page.tsx`  
-**Mocks:** `accessMock.ts` — histórico filtrado por unidade/data  
-**O que falta:** Tabela `access_logs` + queries de filtro.
+**Serviço:** `src/lib/access/accessService.ts` → `getAccessLogs()`  
+**Banco previsto:** `access_logs` + RLS por academy  
+**O que falta:** aplicar a migration no STG correto para habilitar listagem e filtro real por unidade/status/método.
 
 ---
 

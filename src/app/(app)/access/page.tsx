@@ -1,19 +1,19 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/common/Header';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import {
-  getAccessKPIs,
-  mockAccessHistory,
+  getAccessOverview,
   formatAccessTime,
   formatCpfMasked,
   getAccessMethodLabel,
   getAccessStatusLabel,
   type AccessAttempt,
-} from '@/mocks/accessMock';
+  type AccessOverview,
+} from '@/lib/access/accessService';
 
 // Ícones inline SVG
 const icons = {
@@ -200,8 +200,21 @@ function AccessLogItem({ attempt }: { attempt: AccessAttempt }) {
 }
 
 export default function AccessOverviewPage() {
-  const kpis = useMemo(() => getAccessKPIs(), []);
-  const recentAccesses = useMemo(() => mockAccessHistory.slice(0, 8), []);
+  const [overview, setOverview] = useState<AccessOverview | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadOverview() {
+      setIsLoading(true);
+      const data = await getAccessOverview();
+      setOverview(data);
+      setIsLoading(false);
+    }
+
+    loadOverview();
+  }, []);
+
+  const recentAccesses = overview?.recentAccesses || [];
 
   return (
     <div className="min-h-screen bg-[var(--background-primary)]">
@@ -212,24 +225,24 @@ export default function AccessOverviewPage() {
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
           <KPICard
             title="Acessos Hoje"
-            value={kpis.accessesToday}
-            subtitle={`Média: ${kpis.avgDailyAccesses}/dia`}
+            value={isLoading ? '—' : overview?.accessesToday || 0}
+            subtitle="Registros do dia atual"
             icon={icons.users}
             variant="success"
           />
           <KPICard
-            title="Bloqueios Hoje"
-            value={kpis.blockedToday}
+            title="Liberados Hoje"
+            value={isLoading ? '—' : overview?.allowedToday || 0}
+            subtitle="Entradas aprovadas"
+            icon={icons.activity}
+            variant="default"
+          />
+          <KPICard
+            title="Negados Hoje"
+            value={isLoading ? '—' : overview?.deniedToday || 0}
             subtitle="Tentativas negadas"
             icon={icons.block}
             variant="destructive"
-          />
-          <KPICard
-            title="Ativos Agora"
-            value={kpis.activeNow}
-            subtitle={`Pico: ${kpis.peakHour}`}
-            icon={icons.activity}
-            variant="default"
           />
         </div>
 
@@ -275,11 +288,15 @@ export default function AccessOverviewPage() {
             </Link>
           </div>
 
-          {recentAccesses.length > 0 ? (
+          {!isLoading && recentAccesses.length > 0 ? (
             <div className="divide-y divide-[var(--divider-primary)]">
               {recentAccesses.map((attempt) => (
                 <AccessLogItem key={attempt.id} attempt={attempt} />
               ))}
+            </div>
+          ) : isLoading ? (
+            <div className="text-center py-8">
+              <p className="text-[var(--element-secondary)]">Carregando acessos...</p>
             </div>
           ) : (
             <div className="text-center py-8">
