@@ -53,21 +53,25 @@ export interface OnboardingPersonalData {
 export interface OnboardingPlanSelectionData {
 	planId: string;
 	planName: string;
-	billingType: 'monthly' | 'quarterly' | 'semiannual' | 'annual' | 'single';
+	billingType: string;
 	value: number;
 	startDate: string;
 }
 
 export interface OnboardingContractData {
-	contractId: string;
-	contractNumber: string;
+	contractId?: string;
+	contractNumber?: string;
 	acceptedTerms: boolean;
 	signedAt: string;
 	signatureMethod: 'digital' | 'manual';
+	termsVersion?: string;
+	templateId?: string;
+	templateVersion?: number;
+	contractContent?: string;
 }
 
 export interface OnboardingPaymentData {
-	paymentId: string;
+	paymentId?: string;
 	method: 'credit_card' | 'debit' | 'pix' | 'boleto' | 'cash';
 	status: 'pending' | 'completed' | 'failed';
 	value: number;
@@ -75,8 +79,8 @@ export interface OnboardingPaymentData {
 }
 
 export interface OnboardingActivationData {
-	accessCardGenerated: boolean;
-	qrCodeGenerated: boolean;
+	accessCardGenerated?: boolean;
+	qrCodeGenerated?: boolean;
 	activatedAt: string;
 }
 

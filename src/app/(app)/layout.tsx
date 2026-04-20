@@ -11,15 +11,20 @@ export default function AppLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
-  const { profile, isAuthenticated, isStaff, isLoading, logout } = useAuth();
+  const { currentUser, isAuthenticated, isStaff, isLoading, logout } = useAuth();
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(true);
 
   // Proteger rotas do painel administrativo
   useEffect(() => {
     if (!isLoading && (!isAuthenticated || !isStaff)) {
       router.push('/login');
+      return;
     }
-  }, [isAuthenticated, isStaff, isLoading, router]);
+    // Redirect to setup wizard if academy setup is not completed
+    if (!isLoading && isAuthenticated && isStaff && currentUser?.tenancy.setupCompleted === false) {
+      router.push('/setup');
+    }
+  }, [isAuthenticated, isStaff, isLoading, currentUser, router]);
 
   // Loading state
   if (isLoading || !isAuthenticated || !isStaff) {
@@ -29,9 +34,8 @@ export default function AppLayout({
         style={{ backgroundColor: 'var(--background-secondary)' }}
       >
         <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-2 border-t-transparent rounded-full mx-auto mb-3" 
+          <div className="animate-spin w-8 h-8 border-2 border-t-transparent rounded-full mx-auto" 
                style={{ borderColor: 'var(--element-secondary)', borderTopColor: 'transparent' }} />
-          <p style={{ color: 'var(--element-secondary)' }}>Carregando...</p>
         </div>
       </div>
     );
@@ -47,9 +51,9 @@ export default function AppLayout({
   };
 
   const sidebarUser = {
-    name: profile?.name || 'Usuário',
-    email: profile?.email || '',
-    role: getRoleLabel(profile?.staff_role),
+    name: currentUser?.profile.name || 'Usuário',
+    email: currentUser?.profile.email || '',
+    role: getRoleLabel(currentUser?.authorization.role),
   };
 
   return (

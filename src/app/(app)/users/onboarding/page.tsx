@@ -25,6 +25,9 @@ import {
   OnboardingStep,
   updateDraftSession,
 } from '@/lib/users';
+import { activateExternalBilling } from '@/lib/users/onboardingService';
+import { capture } from '@/lib/analytics';
+import type { ActivationOutcome } from '@/components/onboarding/steps/StepActivation';
 
 // ============================================
 // ICONS
@@ -207,23 +210,6 @@ export default function OnboardingPage() {
     }
   };
 
-  const handleComplete = async () => {
-    if (!session) return;
-
-    try {
-      setIsSaving(true);
-      setErrorMessage(null);
-      await finalizeOnboardingDraft(session.id);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Falha ao concluir onboarding');
-      return;
-    } finally {
-      setIsSaving(false);
-    }
-
-    router.push('/users');
-  };
-
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[var(--background-secondary)] flex items-center justify-center">
@@ -294,11 +280,32 @@ export default function OnboardingPage() {
         return (
           <StepActivation
             session={session}
-            onComplete={async (data) => {
-              await goToNextStep(data);
-              await handleComplete();
+            onActivate={async (): Promise<ActivationOutcome> => {
+              // 1. Finalize local (create user, subscription, payment, contract)
+              let result;
+              try {
+                result = await finalizeOnboardingDraft(session.id);
+                capture('first_student_created', {});
+              } catch (err) {
+                return {
+                  localSuccess: false,
+                  error: err instanceof Error ? err.message : 'Falha ao publicar cadastro',
+                };
+              }
+
+              // 2. Attempt external billing if activation data available
+              let billing;
+              if (result.activation?.activated && result.activation.subscription_id && result.activation.payment_id) {
+                billing = await activateExternalBilling(
+                  result.activation.subscription_id,
+                  result.activation.payment_id,
+                );
+              }
+
+              return { localSuccess: true, billing };
             }}
             onBack={goToPreviousStep}
+            onFinish={() => router.push('/users')}
           />
         );
       default:

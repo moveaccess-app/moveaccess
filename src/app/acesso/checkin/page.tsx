@@ -1,47 +1,39 @@
 'use client';
 
-import { useState, useCallback, useEffect, FormEvent, Suspense } from 'react';
+import { useState, useCallback, useEffect, useRef, FormEvent, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
+import { Badge } from '@/components/ui/Badge';
+import {
+  CheckCircle2,
+  XCircle,
+  User,
+  Loader2,
+  Clock,
+  MapPin,
+  RotateCcw,
+} from 'lucide-react';
 import {
   getAccessUnits,
+  getAccessLogs,
   processCheckin,
+  formatAccessTime,
+  formatCpfMasked,
+  getAccessStatusLabel,
   type AccessUnit,
+  type AccessAttempt,
   type CheckInResult,
-} from '@/lib/access/accessService';
+} from '@/lib/access';
 
-const icons = {
-  check: (
-    <svg className="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-    </svg>
-  ),
-  x: (
-    <svg className="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  ),
-  user: (
-    <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-    </svg>
-  ),
-  loader: (
-    <svg className="w-8 h-8 animate-spin" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-    </svg>
-  ),
-};
-
-type Step = 'loading' | 'login' | 'result';
+type Step = 'loading' | 'form' | 'processing' | 'result';
 
 function CheckInContent() {
   const searchParams = useSearchParams();
   const requestedUnitId = searchParams.get('unit');
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState<Step>('loading');
   const [unit, setUnit] = useState<AccessUnit | null>(null);
@@ -49,13 +41,12 @@ function CheckInContent() {
   const [error, setError] = useState('');
   const [identifier, setIdentifier] = useState('');
   const [notes, setNotes] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<CheckInResult | null>(null);
+  const [recentLogs, setRecentLogs] = useState<AccessAttempt[]>([]);
 
   useEffect(() => {
     async function loadUnits() {
       setStep('loading');
-
       const data = await getAccessUnits();
       setUnits(data);
 
@@ -66,7 +57,6 @@ function CheckInContent() {
       }
 
       const selected = (requestedUnitId ? data.find((item) => item.id === requestedUnitId) : null) || data[0];
-
       if (!selected) {
         setError('Unidade não encontrada.');
         setStep('result');
@@ -74,170 +64,264 @@ function CheckInContent() {
       }
 
       setUnit(selected);
-      setStep('login');
-    }
+      setStep('form');
 
+      const logs = await getAccessLogs({ unitId: selected.id, limit: 5 });
+      setRecentLogs(logs);
+    }
     loadUnits();
   }, [requestedUnitId]);
 
+  useEffect(() => {
+    if (step === 'form') {
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [step]);
+
   const handleCheckin = useCallback(async (e: FormEvent) => {
     e.preventDefault();
-    if (!unit) return;
+    if (!unit || !identifier.trim()) return;
 
     setError('');
-    setIsSubmitting(true);
+    setStep('processing');
 
     try {
       const checkResult = await processCheckin({
-        identifier,
+        identifier: identifier.trim(),
         unitId: unit.id,
         method: 'manual',
-        notes,
+        notes: notes.trim() || undefined,
       });
 
       setResult(checkResult);
       setStep('result');
-    } finally {
-      setIsSubmitting(false);
+
+      const logs = await getAccessLogs({ unitId: unit.id, limit: 5 });
+      setRecentLogs(logs);
+    } catch {
+      setResult({
+        allowed: false,
+        reason: 'UNAUTHENTICATED',
+        message: 'Erro ao processar check-in. Tente novamente.',
+        timestamp: new Date(),
+        attemptId: '',
+      });
+      setStep('result');
     }
   }, [identifier, notes, unit]);
 
-  const handleTryAgain = useCallback(() => {
+  const handleReset = useCallback(() => {
     setIdentifier('');
     setNotes('');
     setError('');
     setResult(null);
-    setStep('login');
+    setStep('form');
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[var(--background-primary)] to-[var(--background-secondary)] flex items-center justify-center p-4">
-      <Card className="w-full max-w-md p-6 sm:p-8">
-        {unit && (
-          <div className="text-center mb-6">
-            <h1 className="text-xl font-bold text-[var(--element-primary)]">Check-in</h1>
-            <p className="text-sm text-[var(--element-secondary)]">{unit.name}</p>
-          </div>
-        )}
-
-        {step === 'loading' && (
-          <div className="flex flex-col items-center justify-center py-12">
-            <div className="text-[var(--element-accent)]">{icons.loader}</div>
-            <p className="mt-4 text-[var(--element-secondary)]">Carregando...</p>
-          </div>
-        )}
-
-        {step === 'login' && (
-          <form onSubmit={handleCheckin} className="space-y-6">
-            <div className="flex justify-center mb-4">
-              <div className="p-4 rounded-full bg-[var(--background-tertiary)] text-[var(--element-primary)]">
-                {icons.user}
-              </div>
+    <div className="min-h-screen bg-gradient-to-br from-[var(--background-primary)] to-[var(--background-secondary)]">
+      {/* Header */}
+      <header className="bg-[var(--background-primary)] border-b border-[var(--divider-primary)] px-4 py-3">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-[var(--element-accent)] flex items-center justify-center">
+              <span className="text-white text-sm font-bold">M</span>
             </div>
-
             <div>
-              <Label htmlFor="identifier">CPF, E-mail ou Telefone</Label>
-              <Input
-                id="identifier"
-                type="text"
-                placeholder="Digite o identificador do aluno..."
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                className="mt-1"
-                autoFocus
-              />
+              <h1 className="text-base font-semibold text-[var(--element-primary)]">Check-in Manual</h1>
+              {unit && (
+                <div className="flex items-center gap-1 text-xs text-[var(--element-secondary)]">
+                  <MapPin className="w-3 h-3" />
+                  <span>{unit.name}</span>
+                </div>
+              )}
             </div>
+          </div>
+          {units.length > 1 && unit && (
+            <select
+              value={unit.id}
+              onChange={(e) => {
+                const selected = units.find((item) => item.id === e.target.value);
+                if (selected) setUnit(selected);
+              }}
+              className="px-3 py-1.5 rounded-lg border border-[var(--divider-secondary)] bg-[var(--background-primary)] text-sm text-[var(--element-primary)]"
+            >
+              {units.map((item) => (
+                <option key={item.id} value={item.id}>{item.name}</option>
+              ))}
+            </select>
+          )}
+        </div>
+      </header>
 
-            {units.length > 1 && (
-              <div>
-                <Label htmlFor="unit">Unidade</Label>
-                <select
-                  id="unit"
-                  value={unit?.id || ''}
-                  onChange={(e) => setUnit(units.find((item) => item.id === e.target.value) || null)}
-                  className="w-full mt-1 px-3 py-2 rounded-lg border border-[var(--divider-primary)] bg-[var(--background-primary)] text-[var(--element-primary)] text-sm"
-                >
-                  {units.map((item) => (
-                    <option key={item.id} value={item.id}>{item.name}</option>
+      <main className="max-w-6xl mx-auto px-4 py-6 lg:py-10">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main Card */}
+          <div className="lg:col-span-2">
+            <Card className="p-6 sm:p-8">
+              {step === 'loading' && (
+                <div className="flex flex-col items-center justify-center py-16">
+                  <Loader2 className="w-10 h-10 text-[var(--element-accent)] animate-spin" />
+                  <p className="mt-4 text-[var(--element-secondary)]">Carregando unidades...</p>
+                </div>
+              )}
+
+              {step === 'form' && (
+                <form onSubmit={handleCheckin} className="space-y-6">
+                  <div className="text-center mb-2">
+                    <div className="mx-auto w-16 h-16 rounded-full bg-[var(--background-tertiary)] flex items-center justify-center mb-4">
+                      <User className="w-8 h-8 text-[var(--element-primary)]" />
+                    </div>
+                    <h2 className="text-lg font-semibold text-[var(--element-primary)]">Identificar Aluno</h2>
+                    <p className="text-sm text-[var(--element-secondary)] mt-1">
+                      CPF, e-mail ou telefone do aluno
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="identifier" className="sr-only">Identificador</Label>
+                    <Input
+                      ref={inputRef}
+                      id="identifier"
+                      type="text"
+                      placeholder="Digite CPF, e-mail ou telefone..."
+                      value={identifier}
+                      onChange={(e) => setIdentifier(e.target.value)}
+                      className="text-center text-lg py-3"
+                      autoComplete="off"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="notes" className="text-xs text-[var(--element-secondary)]">
+                      Observação (opcional)
+                    </Label>
+                    <Input
+                      id="notes"
+                      type="text"
+                      placeholder="Ex: primeira aula experimental"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      className="mt-1"
+                    />
+                  </div>
+
+                  {error && (
+                    <p className="text-sm text-[var(--status-negative)] text-center">{error}</p>
+                  )}
+
+                  <Button
+                    type="submit"
+                    disabled={!identifier.trim() || !unit}
+                    className="w-full py-3 text-base font-semibold"
+                  >
+                    Registrar Check-in
+                  </Button>
+                </form>
+              )}
+
+              {step === 'processing' && (
+                <div className="flex flex-col items-center justify-center py-16">
+                  <Loader2 className="w-12 h-12 text-[var(--element-accent)] animate-spin" />
+                  <p className="mt-4 text-lg text-[var(--element-secondary)]">Validando acesso...</p>
+                  <p className="text-sm text-[var(--element-disabled)] mt-1">Verificando plano, pagamentos e regras</p>
+                </div>
+              )}
+
+              {step === 'result' && (
+                <div className="text-center py-8">
+                  {error && !result ? (
+                    <>
+                      <div className="mx-auto w-24 h-24 rounded-full bg-[var(--status-negative-background)] flex items-center justify-center mb-6">
+                        <XCircle className="w-14 h-14 text-[var(--status-negative)]" />
+                      </div>
+                      <h2 className="text-2xl font-bold text-[var(--status-negative)] mb-2">Erro</h2>
+                      <p className="text-[var(--element-secondary)] max-w-sm mx-auto">{error}</p>
+                      <Button variant="outline" onClick={handleReset} className="mt-6">
+                        <RotateCcw className="w-4 h-4 mr-2" />
+                        Tentar Novamente
+                      </Button>
+                    </>
+                  ) : result?.allowed ? (
+                    <>
+                      <div className="mx-auto w-28 h-28 rounded-full bg-[var(--status-positive-background)] flex items-center justify-center mb-6">
+                        <CheckCircle2 className="w-16 h-16 text-[var(--status-positive)]" />
+                      </div>
+                      <h2 className="text-2xl font-bold text-[var(--status-positive)] mb-1">Acesso Liberado</h2>
+                      {result.user?.name && (
+                        <p className="text-xl text-[var(--element-primary)] font-semibold mb-1">{result.user.name}</p>
+                      )}
+                      <p className="text-[var(--element-secondary)]">{result.message}</p>
+                      <AutoReset onReset={handleReset} seconds={5} />
+                    </>
+                  ) : (
+                    <>
+                      <div className="mx-auto w-28 h-28 rounded-full bg-[var(--status-negative-background)] flex items-center justify-center mb-6">
+                        <XCircle className="w-16 h-16 text-[var(--status-negative)]" />
+                      </div>
+                      <h2 className="text-2xl font-bold text-[var(--status-negative)] mb-1">Acesso Negado</h2>
+                      {result?.user?.name && (
+                        <p className="text-xl text-[var(--element-primary)] font-semibold mb-1">{result.user.name}</p>
+                      )}
+                      <p className="text-[var(--element-secondary)] max-w-sm mx-auto">{result?.message}</p>
+                      <Button variant="outline" onClick={handleReset} className="mt-6">
+                        <RotateCcw className="w-4 h-4 mr-2" />
+                        Próximo Aluno
+                      </Button>
+                    </>
+                  )}
+                </div>
+              )}
+            </Card>
+          </div>
+
+          {/* Recent Check-ins Sidebar */}
+          <div className="hidden lg:block">
+            <Card className="p-4">
+              <h3 className="text-sm font-semibold text-[var(--element-primary)] mb-3">
+                Últimos Check-ins
+              </h3>
+              {recentLogs.length > 0 ? (
+                <div className="space-y-3">
+                  {recentLogs.map((log) => (
+                    <div key={log.id} className="flex items-center gap-2.5 py-2 border-b border-[var(--divider-primary)] last:border-0">
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                        log.status === 'allowed' ? 'bg-[var(--status-positive)]' : 'bg-[var(--status-negative)]'
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-[var(--element-primary)] truncate">
+                          {log.userName || 'Desconhecido'}
+                        </p>
+                        <div className="flex items-center gap-1 text-xs text-[var(--element-disabled)]">
+                          <Clock className="w-3 h-3" />
+                          <span>{formatAccessTime(log.timestamp)}</span>
+                          <span>•</span>
+                          <span>{formatCpfMasked(log.userCpf || '')}</span>
+                        </div>
+                      </div>
+                      <Badge
+                        variant={log.status === 'allowed' ? 'default' : 'destructive'}
+                        className="text-xs flex-shrink-0"
+                      >
+                        {getAccessStatusLabel(log.status)}
+                      </Badge>
+                    </div>
                   ))}
-                </select>
-              </div>
-            )}
-
-            <div>
-              <Label htmlFor="notes">Observações</Label>
-              <Input
-                id="notes"
-                type="text"
-                placeholder="Observação opcional do check-in"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-
-            {error && (
-              <p className="text-sm text-[var(--status-negative)] text-center">{error}</p>
-            )}
-
-            <Button type="submit" disabled={!identifier.trim() || !unit || isSubmitting} className="w-full">
-              {isSubmitting ? 'Processando...' : 'Registrar check-in'}
-            </Button>
-
-            <p className="text-xs text-center text-[var(--element-disabled)]">
-              MVP manual operado por colaborador autenticado
-            </p>
-          </form>
-        )}
-
-        {step === 'result' && (
-          <div className="text-center py-6">
-            {error ? (
-              <>
-                <div className="mx-auto w-24 h-24 rounded-full bg-[var(--status-negative-background)] text-[var(--status-negative)] flex items-center justify-center mb-6">
-                  {icons.x}
                 </div>
-                <h2 className="text-2xl font-bold text-[var(--status-negative)] mb-2">Erro</h2>
-                <p className="text-[var(--element-secondary)]">{error}</p>
-              </>
-            ) : result?.allowed ? (
-              <>
-                <div className="mx-auto w-24 h-24 rounded-full bg-[var(--status-positive-background)] text-[var(--status-positive)] flex items-center justify-center mb-6 animate-pulse">
-                  {icons.check}
-                </div>
-                <h2 className="text-2xl font-bold text-[var(--status-positive)] mb-2">Acesso Liberado!</h2>
-                <p className="text-lg text-[var(--element-primary)] font-medium mb-1">{result.user?.name}</p>
-                <p className="text-[var(--element-secondary)]">{result.message}</p>
-                <AutoReset onReset={handleTryAgain} seconds={5} />
-              </>
-            ) : (
-              <>
-                <div className="mx-auto w-24 h-24 rounded-full bg-[var(--status-negative-background)] text-[var(--status-negative)] flex items-center justify-center mb-6">
-                  {icons.x}
-                </div>
-                <h2 className="text-2xl font-bold text-[var(--status-negative)] mb-2">Acesso Negado</h2>
-                {result?.user?.name && (
-                  <p className="text-lg text-[var(--element-primary)] font-medium mb-1">{result.user.name}</p>
-                )}
-                <p className="text-[var(--element-secondary)]">{result?.message}</p>
-                <Button variant="outline" onClick={handleTryAgain} className="mt-6">Tentar Novamente</Button>
-              </>
-            )}
+              ) : (
+                <p className="text-sm text-[var(--element-disabled)] text-center py-6">
+                  Nenhum check-in recente
+                </p>
+              )}
+            </Card>
           </div>
-        )}
-      </Card>
+        </div>
+      </main>
     </div>
   );
 }
 
-// Auto reset component
-function AutoReset({
-  onReset,
-  seconds,
-}: {
-  onReset: () => void;
-  seconds: number;
-}) {
+function AutoReset({ onReset, seconds }: { onReset: () => void; seconds: number }) {
   const [remaining, setRemaining] = useState(seconds);
 
   useEffect(() => {
@@ -251,24 +335,22 @@ function AutoReset({
         return r - 1;
       });
     }, 1000);
-
     return () => clearInterval(timer);
   }, [onReset]);
 
   return (
     <p className="text-xs text-[var(--element-disabled)] mt-6">
-      Retornando em {remaining}s...
+      Próximo aluno em {remaining}s...
     </p>
   );
 }
 
-// Loading fallback
 function CheckInLoading() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-[var(--background-primary)] to-[var(--background-secondary)] flex items-center justify-center p-4">
-      <Card className="w-full max-w-md p-6 sm:p-8">
+      <Card className="w-full max-w-md p-8">
         <div className="flex flex-col items-center justify-center py-12">
-          <div className="text-[var(--element-accent)]">{icons.loader}</div>
+          <Loader2 className="w-10 h-10 text-[var(--element-accent)] animate-spin" />
           <p className="mt-4 text-[var(--element-secondary)]">Carregando...</p>
         </div>
       </Card>

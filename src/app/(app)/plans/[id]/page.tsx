@@ -3,7 +3,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/common/Header';
-import { Button, Card, Badge, Input, Label } from '@/components/ui';
+import { Button, Card, Badge, Input, Label, SkeletonCard } from '@/components/ui';
+import { toast } from 'sonner';
 import {
   archivePlan,
   formatPrice,
@@ -15,13 +16,11 @@ import {
   type Plan,
 } from '@/lib/plans/plansService';
 import {
-  formatAllowedDays,
-  formatAllowedHours,
-  formatAllowedUnits,
   formValuesToPlanInput,
   planToFormValues,
   type PlanFormValues,
 } from '@/lib/plans/planForm';
+import { AccessRuleEditor } from '@/components/plans/AccessRuleEditor';
 
 function Section({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
   return (
@@ -99,26 +98,6 @@ function EditFields({ values, onChange }: { values: PlanFormValues; onChange: (f
         <Input id="dailyCheckInLimit" type="number" min="0" value={values.dailyCheckInLimit} onChange={(e) => onChange('dailyCheckInLimit', e.target.value)} />
       </div>
 
-      <div>
-        <Label htmlFor="allowedDays">Dias permitidos</Label>
-        <Input id="allowedDays" value={values.allowedDays} onChange={(e) => onChange('allowedDays', e.target.value)} placeholder="Ex: 1,2,3,4,5" />
-      </div>
-
-      <div>
-        <Label htmlFor="allowedUnits">IDs de unidades</Label>
-        <Input id="allowedUnits" value={values.allowedUnits} onChange={(e) => onChange('allowedUnits', e.target.value)} placeholder="Ex: unidade-a, unidade-b" />
-      </div>
-
-      <div>
-        <Label htmlFor="allowedStart">Horário inicial</Label>
-        <Input id="allowedStart" type="time" value={values.allowedStart} onChange={(e) => onChange('allowedStart', e.target.value)} />
-      </div>
-
-      <div>
-        <Label htmlFor="allowedEnd">Horário final</Label>
-        <Input id="allowedEnd" type="time" value={values.allowedEnd} onChange={(e) => onChange('allowedEnd', e.target.value)} />
-      </div>
-
       <div className="md:col-span-2">
         <Label htmlFor="notes">Observações de acesso</Label>
         <textarea
@@ -182,14 +161,14 @@ export default function PlanDetailPage() {
     setSaving(false);
 
     if (!result.success || !result.plan) {
-      alert(result.error || 'Não foi possível atualizar o plano.');
+      toast.error(result.error || 'Não foi possível atualizar o plano.');
       return;
     }
 
     setPlan(result.plan);
     setValues(planToFormValues(result.plan));
     setIsEditing(false);
-    alert('Plano atualizado com sucesso.');
+    toast.success('Plano atualizado com sucesso.');
   };
 
   const handleArchive = async () => {
@@ -200,23 +179,22 @@ export default function PlanDetailPage() {
     setSaving(false);
 
     if (!result.success || !result.plan) {
-      alert(result.error || 'Não foi possível arquivar o plano.');
+      toast.error(result.error || 'Não foi possível arquivar o plano.');
       return;
     }
 
     setPlan(result.plan);
     setValues(planToFormValues(result.plan));
-    alert('Plano arquivado com sucesso.');
+    toast.success('Plano arquivado com sucesso.');
   };
 
   if (loading) {
     return (
       <div className="min-h-screen bg-[var(--background-secondary)]">
         <Header title="Plano" />
-        <div className="p-6 max-w-4xl mx-auto">
-          <Card className="p-12 text-center">
-            <p className="text-[var(--text-tertiary)]">Carregando plano...</p>
-          </Card>
+        <div className="p-6 max-w-4xl mx-auto space-y-4">
+          <SkeletonCard />
+          <SkeletonCard />
         </div>
       </div>
     );
@@ -310,18 +288,7 @@ export default function PlanDetailPage() {
           )}
         </Section>
 
-        <Section title="Regras de acesso">
-          <div className="space-y-0">
-            <InfoRow label="Dias permitidos" value={formatAllowedDays(plan.accessRules)} />
-            <InfoRow label="Horário" value={formatAllowedHours(plan.accessRules)} />
-            <InfoRow label="Unidades" value={formatAllowedUnits(plan.accessRules)} />
-            <InfoRow
-              label="Limite diário"
-              value={typeof plan.accessRules.dailyCheckInLimit === 'number' ? String(plan.accessRules.dailyCheckInLimit) : 'Sem limite'}
-            />
-            <InfoRow label="Observações" value={plan.accessRules.notes || 'Sem observações'} />
-          </div>
-        </Section>
+        <AccessRuleEditor planId={plan.id} academyId={plan.academyId} />
 
         <Section title="Metadados">
           <div className="space-y-0">

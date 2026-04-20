@@ -1,1 +1,1 @@
-export * from './accessService';
+export * from './accessServiceSupabase';

@@ -6,15 +6,27 @@
  * UI leve e simples, mobile-first
  */
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { Suspense, useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Input, Label, Card, CardContent, CardHeader, CardTitle, CardDescription, Logo } from '@/components/ui';
 import { useAuth } from '@/contexts/AuthContext';
-import { Lock, User, Smartphone } from 'lucide-react';
+import { capture } from '@/lib/analytics';
+import { getCurrentInviteSignupSession } from '@/lib/invites';
+import { Lock, User, Mail } from 'lucide-react';
 
-export default function StudentLoginPage() {
+export default function StudentLoginPageWrapper() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--background-secondary)' }}><p style={{ color: 'var(--element-secondary)' }}>Carregando...</p></div>}>
+      <StudentLoginPage />
+    </Suspense>
+  );
+}
+
+function StudentLoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { loginAsStudent, isAuthenticated, isStudent, isLoading: authLoading } = useAuth();
+  const nextPath = searchParams.get('next');
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -29,27 +41,33 @@ export default function StudentLoginPage() {
     }
   }, [authLoading, isAuthenticated, isStudent, router]);
 
-  // Formatar CPF/Telefone enquanto digita
+  // Formatar CPF quando o identificador não for email
   const handleIdentifierChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let value = e.target.value;
-    
-    // Remove tudo que não é número
-    const numbers = value.replace(/\D/g, '');
-    
-    // Se parece com CPF (11 dígitos começando com padrão de CPF)
-    if (numbers.length <= 11) {
-      if (numbers.length <= 3) {
-        value = numbers;
-      } else if (numbers.length <= 6) {
-        value = `${numbers.slice(0, 3)}.${numbers.slice(3)}`;
-      } else if (numbers.length <= 9) {
-        value = `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6)}`;
-      } else {
-        value = `${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6, 9)}-${numbers.slice(9, 11)}`;
-      }
+    const rawValue = e.target.value;
+
+    if (/@|[a-z]/i.test(rawValue)) {
+      setIdentifier(rawValue.trim());
+      return;
     }
-    
-    setIdentifier(value);
+
+    const numbers = rawValue.replace(/\D/g, '').slice(0, 11);
+
+    if (numbers.length <= 3) {
+      setIdentifier(numbers);
+      return;
+    }
+
+    if (numbers.length <= 6) {
+      setIdentifier(`${numbers.slice(0, 3)}.${numbers.slice(3)}`);
+      return;
+    }
+
+    if (numbers.length <= 9) {
+      setIdentifier(`${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6)}`);
+      return;
+    }
+
+    setIdentifier(`${numbers.slice(0, 3)}.${numbers.slice(3, 6)}.${numbers.slice(6, 9)}-${numbers.slice(9, 11)}`);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -61,11 +79,22 @@ export default function StudentLoginPage() {
       const result = await loginAsStudent(identifier, password);
 
       if (result.success) {
-        router.push('/aluno');
+        capture('login_success', { user_type: 'student' });
+        const pendingSignup = await getCurrentInviteSignupSession();
+
+        if (pendingSignup.success) {
+          router.push(nextPath || '/cadastro/continuar');
+          return;
+        }
+
+        router.push(nextPath || '/aluno');
       } else {
-        setError(result.error || 'Erro ao fazer login');
+        const errorMsg = result.error || 'Erro ao fazer login';
+        capture('login_failed', { user_type: 'student', error: errorMsg });
+        setError(errorMsg);
       }
     } catch {
+      capture('login_failed', { user_type: 'student', error: 'unexpected_error' });
       setError('Erro inesperado. Tente novamente.');
     } finally {
       setIsLoading(false);
@@ -126,24 +155,29 @@ export default function StudentLoginPage() {
           </CardHeader>
           <CardContent className="px-6 pb-6">
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Campo CPF/Telefone */}
+              {/* Campo E-mail/CPF */}
               <div className="space-y-2">
-                <Label htmlFor="identifier" className="text-sm font-semibold">CPF ou Telefone</Label>
+                <Label htmlFor="identifier" className="text-sm font-semibold">E-mail ou CPF</Label>
                 <div className="relative">
-                  <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5" style={{ color: 'var(--element-secondary)' }} />
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5" style={{ color: 'var(--element-secondary)' }} />
                   <Input
                     id="identifier"
                     type="text"
-                    placeholder="000.000.000-00 ou 11999999999"
+                    placeholder="seu@email.com ou 000.000.000-00"
                     value={identifier}
                     onChange={handleIdentifierChange}
                     required
                     autoComplete="username"
                     disabled={isLoading}
-                    inputMode="numeric"
+                    inputMode={identifier.includes('@') ? 'email' : 'text'}
+                    autoCapitalize="none"
+                    spellCheck={false}
                     className="pl-11 h-11"
                   />
                 </div>
+                <p className="text-xs" style={{ color: 'var(--element-secondary)' }}>
+                  Use o mesmo e-mail do cadastro ou seu CPF.
+                </p>
               </div>
 
               {/* Campo Senha */}
@@ -208,36 +242,38 @@ export default function StudentLoginPage() {
               </Button>
             </form>
 
-            {/* Credenciais de Demo */}
-            <div 
-              className="mt-6 p-4 rounded-xl text-xs border"
-              style={{ 
-                backgroundColor: 'var(--background-secondary)',
-                borderColor: 'var(--divider-primary)'
-              }}
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--status-info)' }} />
-                <p className="font-semibold" style={{ color: 'var(--element-primary)' }}>
-                  Alunos de demonstração
-                </p>
+            {/* Credenciais de Demo — só em desenvolvimento */}
+            {process.env.NODE_ENV === 'development' && (
+              <div 
+                className="mt-6 p-4 rounded-xl text-xs border"
+                style={{ 
+                  backgroundColor: 'var(--background-secondary)',
+                  borderColor: 'var(--divider-primary)'
+                }}
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--status-info)' }} />
+                  <p className="font-semibold" style={{ color: 'var(--element-primary)' }}>
+                    Alunos de demonstração
+                  </p>
+                </div>
+                <div className="space-y-1.5 ml-3.5">
+                  <div>
+                    <span className="font-medium" style={{ color: 'var(--element-primary)' }}>João:</span>
+                    <span style={{ color: 'var(--element-secondary)' }}> CPF 12345678900 / Aluno@123</span>
+                  </div>
+                  <div>
+                    <span className="font-medium" style={{ color: 'var(--element-primary)' }}>Maria:</span>
+                    <span style={{ color: 'var(--element-secondary)' }}> CPF 98765432100 / Maria@123</span>
+                  </div>
+                  <div>
+                    <span className="font-medium" style={{ color: 'var(--element-primary)' }}>Pedro:</span>
+                    <span style={{ color: 'var(--element-secondary)' }}> CPF 11122233344 / Pedro@123 </span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--status-alert-background)', color: 'var(--status-alert)' }}>expirado</span>
+                  </div>
+                </div>
               </div>
-              <div className="space-y-1.5 ml-3.5">
-                <div>
-                  <span className="font-medium" style={{ color: 'var(--element-primary)' }}>João:</span>
-                  <span style={{ color: 'var(--element-secondary)' }}> CPF 12345678900 / Aluno@123</span>
-                </div>
-                <div>
-                  <span className="font-medium" style={{ color: 'var(--element-primary)' }}>Maria:</span>
-                  <span style={{ color: 'var(--element-secondary)' }}> CPF 98765432100 / Maria@123</span>
-                </div>
-                <div>
-                  <span className="font-medium" style={{ color: 'var(--element-primary)' }}>Pedro:</span>
-                  <span style={{ color: 'var(--element-secondary)' }}> CPF 11122233344 / Pedro@123 </span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--status-alert-background)', color: 'var(--status-alert)' }}>expirado</span>
-                </div>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
 

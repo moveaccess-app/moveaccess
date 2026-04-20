@@ -2,7 +2,8 @@
 export { createClient } from './client';
 export { createServerSupabaseClient } from './server';
 export { updateSession } from './middleware';
-export type { Database, Tables, TablesInsert, TablesUpdate, Enums, Views } from './types';
+export { getActiveAcademyId } from './academyScope';
+export type { Database, Tables, TablesInsert, TablesUpdate, Enums } from './types';
 
 // Data provider functions
 export {

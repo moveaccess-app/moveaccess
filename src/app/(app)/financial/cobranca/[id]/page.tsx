@@ -1,474 +1,485 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
 import { Header } from '@/components/common/Header';
-import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
-import { Label } from '@/components/ui/Label';
+import { toast } from 'sonner';
 import {
-  getChargeById,
-  CHARGE_STATUS_LABELS,
-  CHARGE_STATUS_VARIANT,
-  PAYMENT_METHOD_LABELS,
-  ADJUSTMENT_TYPE_LABELS,
   formatCurrency,
-  formatDate,
-  formatDateTime,
-  formatCompetence,
+  formatPaymentDate,
+  formatPaymentDateTime,
+  getAsaasStatusLabel,
+  getAsaasStatusVariant,
+  getChargeOriginLabel,
+  getChargeOriginVariant,
   getDaysOverdue,
-  getDaysUntilDue,
-  generatePaymentLink,
-  AdjustmentType,
-  PaymentMethod,
-} from '@/mocks/financialMock';
+  getPaymentById,
+  getPaymentLink,
+  getPaymentMethodLabel,
+  getPaymentStatusLabel,
+  getPaymentStatusVariant,
+  getPaymentsByStudent,
+  getReminderTemplate,
+  markPaymentFailed,
+  markPaymentPaid,
+  type Payment,
+  type PaymentMethod,
+} from '@/lib/payments/paymentService';
+import { ChargeTroubleshooting } from '../../components/ChargeTroubleshooting';
 
-type ModalType = 'adjustment' | 'payment' | null;
+const PAYMENT_METHOD_OPTIONS: { value: PaymentMethod; label: string }[] = [
+  { value: 'manual', label: 'Manual' },
+  { value: 'pix', label: 'Pix' },
+  { value: 'card', label: 'Cartão' },
+  { value: 'boleto', label: 'Boleto' },
+];
 
-export default function ChargeDetailPage() {
+function toDateTimeLocalValue(value: string) {
+  const date = new Date(value);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
+export default function FinancialChargeDetailPage() {
+  const params = useParams<{ id: string }>();
   const router = useRouter();
-  const params = useParams();
-  const chargeId = params.id as string;
+  const paymentId = typeof params?.id === 'string' ? params.id : '';
 
-  const charge = useMemo(() => getChargeById(chargeId), [chargeId]);
+  const [payment, setPayment] = useState<Payment | null>(null);
+  const [studentPayments, setStudentPayments] = useState<Payment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [showPaidModal, setShowPaidModal] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [paidMethod, setPaidMethod] = useState<PaymentMethod>('pix');
+  const [paidReference, setPaidReference] = useState('');
+  const [paidAt, setPaidAt] = useState(toDateTimeLocalValue(new Date().toISOString()));
 
-  const [modalType, setModalType] = useState<ModalType>(null);
-  const [adjustmentType, setAdjustmentType] = useState<AdjustmentType>('discount_percentage');
-  const [adjustmentValue, setAdjustmentValue] = useState('');
-  const [adjustmentNotes, setAdjustmentNotes] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
-  const [paymentAmount, setPaymentAmount] = useState('');
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+  useEffect(() => {
+    let cancelled = false;
 
-  if (!charge) {
-    return (
-      <div className="flex flex-col h-full bg-[var(--background-secondary)]">
-        <Header title="Cobrança não encontrada" />
-        <div className="flex-1 flex items-center justify-center">
-          <Card className="p-8 text-center">
-            <div className="text-[var(--element-secondary)]">
-              Cobrança com ID {chargeId} não encontrada.
-            </div>
-            <Button onClick={() => router.push('/financial')} className="mt-4">
-              Voltar ao Financeiro
-            </Button>
-          </Card>
-        </div>
-      </div>
-    );
-  }
+    const run = async () => {
+      if (!paymentId) {
+        setError('Cobrança inválida.');
+        setLoading(false);
+        return;
+      }
 
-  const handleCopyPaymentLink = async () => {
-    const link = generatePaymentLink(charge.id);
-    await navigator.clipboard.writeText(link);
-    alert('Link de pagamento copiado!');
+      setLoading(true);
+      setError(null);
+
+      const loadedPayment = await getPaymentById(paymentId);
+      if (!loadedPayment) {
+        if (!cancelled) {
+          setPayment(null);
+          setStudentPayments([]);
+          setError('Cobrança não encontrada.');
+          setLoading(false);
+        }
+        return;
+      }
+
+      const relatedPayments = loadedPayment.student?.id
+        ? await getPaymentsByStudent(loadedPayment.student.id)
+        : [];
+
+      if (cancelled) {
+        return;
+      }
+
+      setPayment(loadedPayment);
+      setPaidMethod(loadedPayment.method);
+      setPaidReference(loadedPayment.reference || '');
+      setPaidAt(toDateTimeLocalValue(loadedPayment.paidAt || new Date().toISOString()));
+      setStudentPayments(relatedPayments.filter((item: Payment) => item.id !== loadedPayment.id));
+      setLoading(false);
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      void run();
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [paymentId, reloadKey]);
+
+  const overdueDays = useMemo(() => {
+    if (!payment || payment.status === 'paid' || payment.status === 'refunded') {
+      return 0;
+    }
+    return getDaysOverdue(payment.dueDate);
+  }, [payment]);
+
+  const paymentLink = useMemo(() => (payment ? getPaymentLink(payment) : null), [payment]);
+
+  const handleCopy = async (value: string, message: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success(message);
+    } catch {
+      toast.error('Não foi possível copiar o conteúdo.');
+    }
   };
 
-  const handleApplyAdjustment = () => {
-    // Mock: Em produção, isso chamaria a API
-    alert(`Ajuste aplicado:\nTipo: ${ADJUSTMENT_TYPE_LABELS[adjustmentType]}\nValor: ${adjustmentValue}\nObservação: ${adjustmentNotes}`);
-    setModalType(null);
-    setAdjustmentValue('');
-    setAdjustmentNotes('');
+  const handleMarkPaid = async () => {
+    if (!payment) {
+      return;
+    }
+
+    setSaving(true);
+    setActionError(null);
+
+    const result = await markPaymentPaid(payment.id, {
+      method: paidMethod,
+      reference: paidReference.trim() || null,
+      paidAt: new Date(paidAt).toISOString(),
+    });
+
+    setSaving(false);
+
+    if (!result.success) {
+      setActionError(result.error || 'Não foi possível registrar o pagamento.');
+      return;
+    }
+
+    setShowPaidModal(false);
+    setReloadKey((current) => current + 1);
   };
 
-  const handleRegisterPayment = () => {
-    // Mock: Em produção, isso chamaria a API
-    alert(`Pagamento registrado:\nMétodo: ${PAYMENT_METHOD_LABELS[paymentMethod]}\nValor: ${formatCurrency(parseFloat(paymentAmount) || 0)}\nData: ${paymentDate}`);
-    setModalType(null);
-    setPaymentAmount('');
-  };
-
-  const renderDueDateStatus = () => {
-    if (charge.status === 'paid' || charge.status === 'waived' || charge.status === 'cancelled') {
-      return null;
+  const handleMarkFailed = async () => {
+    if (!payment) {
+      return;
     }
 
-    if (charge.status === 'overdue') {
-      const days = getDaysOverdue(charge.dueDate);
-      return (
-        <Badge variant="destructive" className="ml-2">
-          {days} dia(s) em atraso
-        </Badge>
-      );
+    setSaving(true);
+    setActionError(null);
+
+    const result = await markPaymentFailed(payment.id, {
+      reference: paidReference.trim() || payment.reference || null,
+    });
+
+    setSaving(false);
+
+    if (!result.success) {
+      setActionError(result.error || 'Não foi possível marcar a cobrança como falha.');
+      return;
     }
 
-    const days = getDaysUntilDue(charge.dueDate);
-    if (days <= 7 && days >= 0) {
-      return (
-        <Badge variant="warning" className="ml-2">
-          Vence em {days} dia(s)
-        </Badge>
-      );
-    }
-
-    return null;
+    setReloadKey((current) => current + 1);
   };
 
   return (
-    <div className="flex flex-col h-full bg-[var(--background-secondary)]">
-      <Header title={`Cobrança ${charge.id}`} />
+    <div className="min-h-screen bg-[var(--background-secondary)]">
+      <Header
+        title="Detalhe da cobrança"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => router.push('/financial')}>Voltar</Button>
+            <Button variant="secondary" onClick={() => setReloadKey((current) => current + 1)} disabled={loading || saving}>Atualizar</Button>
+          </div>
+        }
+      />
 
-      <div className="flex-1 overflow-auto p-6">
-        <div className="max-w-4xl mx-auto space-y-6">
-          {/* Botão Voltar */}
-          <Button variant="ghost" onClick={() => router.back()}>
-            <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-            Voltar
-          </Button>
-
-          {/* Cabeçalho com Status */}
-          <Card className="p-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-3 mb-2">
-                  <h1 className="text-2xl font-bold text-[var(--element-primary)]">
-                    {charge.userName}
-                  </h1>
-                  <Badge variant={CHARGE_STATUS_VARIANT[charge.status]}>
-                    {CHARGE_STATUS_LABELS[charge.status]}
-                  </Badge>
-                </div>
-                <div className="text-[var(--element-secondary)]">
-                  {charge.planName} • {formatCompetence(charge.competence)}
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="text-3xl font-bold text-[var(--element-primary)]">
-                  {formatCurrency(charge.finalValue)}
-                </div>
-                {charge.baseValue !== charge.finalValue && (
-                  <div className="text-sm text-[var(--element-disabled)] line-through">
-                    Original: {formatCurrency(charge.baseValue)}
-                  </div>
-                )}
-              </div>
+      <main className="p-4 lg:p-6 space-y-6">
+        {loading ? (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-[var(--divider-primary)] bg-[var(--background-primary)] p-6 space-y-3">
+              <div className="h-5 w-32 rounded bg-[var(--background-tertiary)] animate-pulse" />
+              <div className="h-4 w-48 rounded bg-[var(--background-tertiary)] animate-pulse" />
+              <div className="h-4 w-64 rounded bg-[var(--background-tertiary)] animate-pulse" />
+            </div>
+            <div className="rounded-lg border border-[var(--divider-primary)] bg-[var(--background-primary)] p-6 space-y-3">
+              <div className="h-5 w-40 rounded bg-[var(--background-tertiary)] animate-pulse" />
+              <div className="h-4 w-56 rounded bg-[var(--background-tertiary)] animate-pulse" />
+            </div>
+          </div>
+        ) : error || !payment ? (
+          <Card className="p-10 text-center space-y-4">
+            <div className="text-[var(--status-negative)]">{error || 'Cobrança não encontrada.'}</div>
+            <div>
+              <Link href="/financial" className="text-sm text-[var(--status-info)] hover:underline">
+                Voltar para o financeiro
+              </Link>
             </div>
           </Card>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+              <Card className="p-6 xl:col-span-2 space-y-6">
+                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap mb-2">
+                      <h1 className="text-2xl font-semibold text-[var(--element-primary)]">
+                        {payment.student?.fullName || 'Aluno não encontrado'}
+                      </h1>
+                      <Badge variant={getPaymentStatusVariant(payment.status)}>{getPaymentStatusLabel(payment.status)}</Badge>
+                      <Badge variant={getChargeOriginVariant(payment.chargeOrigin)}>{getChargeOriginLabel(payment.chargeOrigin)}</Badge>
+                      {payment.isAsaasManaged && payment.asaasStatus && (
+                        <Badge variant={getAsaasStatusVariant(payment.asaasStatus)}>{getAsaasStatusLabel(payment.asaasStatus)}</Badge>
+                      )}
+                      {overdueDays > 0 && <Badge variant="destructive">{overdueDays}d atraso</Badge>}
+                    </div>
+                    <div className="text-sm text-[var(--element-secondary)] space-y-1">
+                      <div>{payment.subscription?.planName || 'Plano não identificado'}</div>
+                      <div>{payment.student?.registrationId || 'Sem matrícula'} • {payment.student?.email || 'Sem e-mail'}</div>
+                    </div>
+                  </div>
+                  <div className="text-left lg:text-right">
+                    <div className="text-sm text-[var(--element-secondary)] mb-1">Valor da cobrança</div>
+                    <div className="text-3xl font-bold text-[var(--element-primary)]">{formatCurrency(payment.amount, payment.currency)}</div>
+                  </div>
+                </div>
 
-          {/* Grid de Informações */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Informações da Cobrança */}
-            <Card className="p-6">
-              <h2 className="text-lg font-semibold text-[var(--element-primary)] mb-4">
-                Informações da Cobrança
-              </h2>
-              <dl className="space-y-3">
-                <div className="flex justify-between">
-                  <dt className="text-[var(--element-secondary)]">Código</dt>
-                  <dd className="text-[var(--element-primary)] font-medium">{charge.id}</dd>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                  <Card className="p-4 bg-[var(--background-tertiary)]">
+                    <div className="text-xs text-[var(--element-disabled)] mb-1">Vencimento</div>
+                    <div className="font-medium text-[var(--element-primary)]">{formatPaymentDate(payment.dueDate)}</div>
+                  </Card>
+                  <Card className="p-4 bg-[var(--background-tertiary)]">
+                    <div className="text-xs text-[var(--element-disabled)] mb-1">Método</div>
+                    <div className="font-medium text-[var(--element-primary)]">{getPaymentMethodLabel(payment.method)}</div>
+                  </Card>
+                  <Card className="p-4 bg-[var(--background-tertiary)]">
+                    <div className="text-xs text-[var(--element-disabled)] mb-1">Pago em</div>
+                    <div className="font-medium text-[var(--element-primary)]">{payment.paidAt ? formatPaymentDateTime(payment.paidAt) : 'Ainda não pago'}</div>
+                  </Card>
+                  <Card className="p-4 bg-[var(--background-tertiary)]">
+                    <div className="text-xs text-[var(--element-disabled)] mb-1">Referência</div>
+                    <div className="font-medium text-[var(--element-primary)] break-words">{payment.reference || 'Sem referência'}</div>
+                  </Card>
                 </div>
-                <div className="flex justify-between">
-                  <dt className="text-[var(--element-secondary)]">Vencimento</dt>
-                  <dd className="text-[var(--element-primary)] font-medium flex items-center">
-                    {formatDate(charge.dueDate)}
-                    {renderDueDateStatus()}
-                  </dd>
+
+                {actionError && (
+                  <Card className="p-4 border-[var(--status-negative)]/20 bg-[var(--status-negative)]/5">
+                    <div className="text-sm text-[var(--status-negative)]">{actionError}</div>
+                  </Card>
+                )}
+
+                <div className="flex flex-wrap gap-3">
+                  {!payment.isAsaasManaged && payment.status !== 'paid' && (
+                    <Button onClick={() => setShowPaidModal(true)} disabled={saving}>
+                      Registrar pagamento
+                    </Button>
+                  )}
+                  {!payment.isAsaasManaged && payment.status !== 'failed' && payment.status !== 'paid' && (
+                    <Button variant="destructive" onClick={() => void handleMarkFailed()} disabled={saving}>
+                      Marcar falha
+                    </Button>
+                  )}
+                  {paymentLink && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => void handleCopy(paymentLink, 'Link de pagamento copiado.')}
+                    >
+                      Copiar link
+                    </Button>
+                  )}
+                  <Button
+                    variant="secondary"
+                    onClick={() => void handleCopy(getReminderTemplate(payment), 'Lembrete copiado.')}
+                  >
+                    Copiar lembrete
+                  </Button>
                 </div>
-                <div className="flex justify-between">
-                  <dt className="text-[var(--element-secondary)]">Valor Original</dt>
-                  <dd className="text-[var(--element-primary)] font-medium">
-                    {formatCurrency(charge.baseValue)}
-                  </dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="text-[var(--element-secondary)]">Valor Final</dt>
-                  <dd className="text-[var(--element-primary)] font-medium">
-                    {formatCurrency(charge.finalValue)}
-                  </dd>
-                </div>
-                {charge.paidValue !== undefined && charge.paidValue > 0 && (
-                  <div className="flex justify-between">
-                    <dt className="text-[var(--element-secondary)]">Valor Pago</dt>
-                    <dd className="text-[var(--status-positive)] font-medium">
-                      {formatCurrency(charge.paidValue)}
-                    </dd>
+
+                {payment.isAsaasManaged && (
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-[var(--background-tertiary)] text-sm text-[var(--element-secondary)]">
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Cobrança controlada pelo Asaas — status atualizado automaticamente via webhook.
                   </div>
                 )}
-                <div className="flex justify-between">
-                  <dt className="text-[var(--element-secondary)]">Criado em</dt>
-                  <dd className="text-[var(--element-primary)]">{formatDateTime(charge.createdAt)}</dd>
-                </div>
-              </dl>
-            </Card>
+              </Card>
 
-            {/* Informações de Pagamento */}
-            <Card className="p-6">
-              <h2 className="text-lg font-semibold text-[var(--element-primary)] mb-4">
-                Pagamento
-              </h2>
-              {charge.paidAt ? (
-                <dl className="space-y-3">
-                  <div className="flex justify-between">
-                    <dt className="text-[var(--element-secondary)]">Data do Pagamento</dt>
-                    <dd className="text-[var(--element-primary)] font-medium">
-                      {formatDateTime(charge.paidAt)}
-                    </dd>
+              <Card className="p-6 space-y-4">
+                <h2 className="text-lg font-semibold text-[var(--element-primary)]">Contexto do aluno</h2>
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <div className="text-[var(--element-disabled)] mb-1">Aluno</div>
+                    <div className="font-medium text-[var(--element-primary)]">{payment.student?.fullName || '—'}</div>
                   </div>
-                  <div className="flex justify-between">
-                    <dt className="text-[var(--element-secondary)]">Método</dt>
-                    <dd className="text-[var(--element-primary)] font-medium">
-                      {charge.paymentMethod && PAYMENT_METHOD_LABELS[charge.paymentMethod]}
-                    </dd>
+                  <div>
+                    <div className="text-[var(--element-disabled)] mb-1">Documento</div>
+                    <div className="font-medium text-[var(--element-primary)]">{payment.student?.document || '—'}</div>
                   </div>
-                </dl>
-              ) : (
-                <div className="text-center py-4">
-                  <div className="text-[var(--element-disabled)] mb-4">
-                    Pagamento não registrado
+                  <div>
+                    <div className="text-[var(--element-disabled)] mb-1">Assinatura</div>
+                    <div className="font-medium text-[var(--element-primary)]">
+                      {payment.subscription?.planName || '—'}
+                      {payment.subscription?.subscriptionStatus && (
+                        <span className="text-xs text-[var(--element-disabled)] ml-1">({payment.subscription.subscriptionStatus})</span>
+                      )}
+                    </div>
                   </div>
-                  <Button onClick={() => setModalType('payment')}>
-                    Registrar Pagamento
-                  </Button>
+                  <div>
+                    <div className="text-[var(--element-disabled)] mb-1">Matrícula</div>
+                    <div className="font-medium text-[var(--element-primary)]">{payment.student?.registrationId || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-[var(--element-disabled)] mb-1">Criada em</div>
+                    <div className="font-medium text-[var(--element-primary)]">{formatPaymentDateTime(payment.createdAt)}</div>
+                  </div>
                 </div>
-              )}
-            </Card>
-          </div>
+              </Card>
 
-          {/* Ajustes Aplicados */}
-          {charge.adjustments && charge.adjustments.length > 0 && (
-            <Card className="p-6">
-              <h2 className="text-lg font-semibold text-[var(--element-primary)] mb-4">
-                Ajustes Aplicados
-              </h2>
-              <div className="space-y-3">
-                {charge.adjustments.map((adj, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between p-3 rounded-lg bg-[var(--background-tertiary)]"
-                  >
+              {payment.isAsaasManaged && (
+                <Card className="p-6 space-y-4">
+                  <h2 className="text-lg font-semibold text-[var(--element-primary)]">Dados do Asaas</h2>
+                  <div className="space-y-3 text-sm">
                     <div>
-                      <div className="font-medium text-[var(--element-primary)]">
-                        {ADJUSTMENT_TYPE_LABELS[adj.type]}
-                      </div>
-                      {adj.description && (
-                        <div className="text-sm text-[var(--element-disabled)]">{adj.description}</div>
-                      )}
-                    </div>
-                    <div className="text-right">
-                      <div className={`font-medium ${adj.value < 0 ? 'text-[var(--status-positive)]' : 'text-[var(--status-negative)]'}`}>
-                        {adj.value > 0 ? '+' : ''}{formatCurrency(adj.value)}
-                      </div>
-                      <div className="text-xs text-[var(--element-disabled)]">
-                        {formatDate(adj.appliedAt)} por {adj.appliedBy}
+                      <div className="text-[var(--element-disabled)] mb-1">Status externo</div>
+                      <div>
+                        <Badge variant={getAsaasStatusVariant(payment.asaasStatus || '')}>
+                          {getAsaasStatusLabel(payment.asaasStatus || '')}
+                        </Badge>
                       </div>
                     </div>
+                    {payment.asaasBillingType && (
+                      <div>
+                        <div className="text-[var(--element-disabled)] mb-1">Tipo de cobrança</div>
+                        <div className="font-medium text-[var(--element-primary)]">{payment.asaasBillingType}</div>
+                      </div>
+                    )}
+                    {payment.asaasNetValue != null && (
+                      <div>
+                        <div className="text-[var(--element-disabled)] mb-1">Valor líquido</div>
+                        <div className="font-medium text-[var(--element-primary)]">{formatCurrency(payment.asaasNetValue)}</div>
+                      </div>
+                    )}
+                    {payment.asaasSyncedAt && (
+                      <div>
+                        <div className="text-[var(--element-disabled)] mb-1">Última sincronização</div>
+                        <div className="font-medium text-[var(--element-primary)]">{formatPaymentDateTime(payment.asaasSyncedAt)}</div>
+                      </div>
+                    )}
+                    {(payment.invoiceUrl || payment.bankSlipUrl) && (
+                      <div>
+                        <div className="text-[var(--element-disabled)] mb-1">Links</div>
+                        <div className="flex flex-col gap-1">
+                          {payment.invoiceUrl && (
+                            <a href={payment.invoiceUrl} target="_blank" rel="noopener noreferrer" className="text-[var(--status-info)] hover:underline text-sm">
+                              Ver fatura (invoice)
+                            </a>
+                          )}
+                          {payment.bankSlipUrl && (
+                            <a href={payment.bankSlipUrl} target="_blank" rel="noopener noreferrer" className="text-[var(--status-info)] hover:underline text-sm">
+                              Ver boleto
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {payment.isRecurring && (
+                      <div>
+                        <div className="text-[var(--element-disabled)] mb-1">Tipo</div>
+                        <div className="font-medium text-[var(--element-primary)]">Recorrente (assinatura)</div>
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {/* Timeline de Eventos */}
-          {charge.events && charge.events.length > 0 && (
-            <Card className="p-6">
-              <h2 className="text-lg font-semibold text-[var(--element-primary)] mb-4">
-                Histórico
-              </h2>
-              <div className="space-y-4">
-                {charge.events.map((event, index) => (
-                  <div key={index} className="flex gap-4">
-                    <div className="flex flex-col items-center">
-                      <div className="w-3 h-3 rounded-full bg-[var(--status-info)]" />
-                      {index < charge.events!.length - 1 && (
-                        <div className="w-0.5 h-full bg-[var(--divider-primary)] mt-1" />
-                      )}
-                    </div>
-                    <div className="flex-1 pb-4">
-                      <div className="font-medium text-[var(--element-primary)]">
-                        {event.description}
-                      </div>
-                      <div className="text-sm text-[var(--element-disabled)]">
-                        {formatDateTime(event.timestamp)}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
-
-          {/* Ações */}
-          <Card className="p-6">
-            <h2 className="text-lg font-semibold text-[var(--element-primary)] mb-4">
-              Ações
-            </h2>
-            <div className="flex flex-wrap gap-3">
-              {charge.status !== 'paid' && charge.status !== 'cancelled' && (
-                <>
-                  <Button onClick={() => setModalType('payment')}>
-                    <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    Registrar Pagamento
-                  </Button>
-                  <Button variant="secondary" onClick={() => setModalType('adjustment')}>
-                    <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                    </svg>
-                    Aplicar Ajuste
-                  </Button>
-                  <Button variant="secondary" onClick={handleCopyPaymentLink}>
-                    <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                    </svg>
-                    Copiar Link Pagamento
-                  </Button>
-                </>
+                </Card>
               )}
-              <Button
-                variant="ghost"
-                onClick={() => router.push(`/users/${charge.userId}`)}
-              >
-                Ver Perfil do Aluno
+
+              {payment.isAsaasManaged && (
+                <ChargeTroubleshooting
+                  payment={payment}
+                  onReconciled={() => setReloadKey((current) => current + 1)}
+                />
+              )}
+            </div>
+
+            <Card className="p-6">
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-[var(--element-primary)]">Outras cobranças do aluno</h2>
+                  <p className="text-sm text-[var(--element-secondary)]">Usado para validar o histórico por aluno.</p>
+                </div>
+                <Badge variant="secondary">{studentPayments.length}</Badge>
+              </div>
+
+              {studentPayments.length === 0 ? (
+                <div className="text-sm text-[var(--element-secondary)]">Nenhuma outra cobrança encontrada para este aluno.</div>
+              ) : (
+                <div className="space-y-3">
+                  {studentPayments.map((item) => (
+                    <Link key={item.id} href={`/financial/cobranca/${item.id}`} className="block">
+                      <div className="p-4 rounded-xl border border-[var(--divider-primary)] hover:bg-[var(--background-tertiary)] transition-colors">
+                        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <span className="font-medium text-[var(--element-primary)]">{item.reference || 'Cobrança sem referência'}</span>
+                              <Badge variant={getPaymentStatusVariant(item.status)}>{getPaymentStatusLabel(item.status)}</Badge>
+                            </div>
+                            <div className="text-sm text-[var(--element-secondary)]">
+                              {formatPaymentDate(item.dueDate)} • {getPaymentMethodLabel(item.method)}
+                            </div>
+                          </div>
+                          <div className="text-left md:text-right font-semibold text-[var(--element-primary)]">
+                            {formatCurrency(item.amount, item.currency)}
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </>
+        )}
+      </main>
+
+      {showPaidModal && payment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <Card className="w-full max-w-lg p-6 space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-[var(--element-primary)]">Registrar pagamento</h2>
+                <p className="text-sm text-[var(--element-secondary)] mt-1">Atualize a cobrança como paga e salve o método utilizado.</p>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setShowPaidModal(false)}>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </Button>
             </div>
-          </Card>
-        </div>
-      </div>
 
-      {/* Modal de Ajuste */}
-      {modalType === 'adjustment' && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="w-full max-w-md m-4 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-[var(--element-primary)]">
-                Aplicar Ajuste
-              </h2>
-              <button
-                onClick={() => setModalType(null)}
-                className="text-[var(--element-disabled)] hover:text-[var(--element-primary)]"
+            <div>
+              <label className="block text-sm font-medium text-[var(--element-primary)] mb-2">Método</label>
+              <select
+                value={paidMethod}
+                onChange={(event) => setPaidMethod(event.target.value as PaymentMethod)}
+                className="w-full px-3 py-2 border border-[var(--divider-primary)] rounded-lg bg-[var(--background-primary)] text-[var(--element-primary)] text-sm h-10"
               >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+                {PAYMENT_METHOD_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <Label>Tipo de Ajuste</Label>
-                <select
-                  value={adjustmentType}
-                  onChange={(e) => setAdjustmentType(e.target.value as AdjustmentType)}
-                  className="w-full mt-1 px-3 py-2 rounded-lg border border-[var(--divider-primary)] bg-[var(--background-primary)] text-[var(--element-primary)]"
-                >
-                  {Object.entries(ADJUSTMENT_TYPE_LABELS).map(([key, label]) => (
-                    <option key={key} value={key}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <Label>
-                  {adjustmentType === 'discount_percentage'
-                    ? 'Percentual (%)'
-                    : adjustmentType === 'extension'
-                    ? 'Dias de Extensão'
-                    : 'Valor (R$)'}
-                </Label>
-                <Input
-                  type="number"
-                  value={adjustmentValue}
-                  onChange={(e) => setAdjustmentValue(e.target.value)}
-                  placeholder={adjustmentType === 'discount_percentage' ? 'Ex: 10' : 'Ex: 50.00'}
-                />
-              </div>
-
-              <div>
-                <Label>Observação</Label>
-                <textarea
-                  value={adjustmentNotes}
-                  onChange={(e) => setAdjustmentNotes(e.target.value)}
-                  placeholder="Motivo do ajuste..."
-                  rows={3}
-                  className="w-full mt-1 px-3 py-2 rounded-lg border border-[var(--divider-primary)] bg-[var(--background-primary)] text-[var(--element-primary)] resize-none"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <Button variant="secondary" onClick={() => setModalType(null)} className="flex-1">
-                  Cancelar
-                </Button>
-                <Button onClick={handleApplyAdjustment} className="flex-1">
-                  Aplicar
-                </Button>
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* Modal de Pagamento */}
-      {modalType === 'payment' && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="w-full max-w-md m-4 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-[var(--element-primary)]">
-                Registrar Pagamento
-              </h2>
-              <button
-                onClick={() => setModalType(null)}
-                className="text-[var(--element-disabled)] hover:text-[var(--element-primary)]"
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
+            <div>
+              <label className="block text-sm font-medium text-[var(--element-primary)] mb-2">Data do pagamento</label>
+              <Input type="datetime-local" value={paidAt} onChange={(event) => setPaidAt(event.target.value)} />
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <Label>Método de Pagamento</Label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
-                  className="w-full mt-1 px-3 py-2 rounded-lg border border-[var(--divider-primary)] bg-[var(--background-primary)] text-[var(--element-primary)]"
-                >
-                  {Object.entries(PAYMENT_METHOD_LABELS).map(([key, label]) => (
-                    <option key={key} value={key}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="block text-sm font-medium text-[var(--element-primary)] mb-2">Referência</label>
+              <Input value={paidReference} onChange={(event) => setPaidReference(event.target.value)} placeholder="Ex: PIX confirmado no caixa" />
+            </div>
 
-              <div>
-                <Label>Valor Pago (R$)</Label>
-                <Input
-                  type="number"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(e.target.value)}
-                  placeholder={charge.finalValue.toFixed(2)}
-                />
-                <p className="text-xs text-[var(--element-disabled)] mt-1">
-                  Valor pendente: {formatCurrency(charge.finalValue - (charge.paidValue || 0))}
-                </p>
-              </div>
-
-              <div>
-                <Label>Data do Pagamento</Label>
-                <Input
-                  type="date"
-                  value={paymentDate}
-                  onChange={(e) => setPaymentDate(e.target.value)}
-                />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <Button variant="secondary" onClick={() => setModalType(null)} className="flex-1">
-                  Cancelar
-                </Button>
-                <Button onClick={handleRegisterPayment} className="flex-1">
-                  Registrar
-                </Button>
-              </div>
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="ghost" onClick={() => setShowPaidModal(false)} disabled={saving}>Cancelar</Button>
+              <Button onClick={() => void handleMarkPaid()} disabled={saving}>{saving ? 'Salvando...' : 'Confirmar pagamento'}</Button>
             </div>
           </Card>
         </div>

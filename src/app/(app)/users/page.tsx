@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/common/Header';
-import { Input, Select, Button, Card } from '@/components/ui';
+import { Input, Select, Button, Card, SkeletonTable } from '@/components/ui';
 import { usersContent } from '@/data/usersContent';
 import { 
   searchAndFilterUsers,
@@ -266,11 +266,13 @@ export default function UsersPage() {
 
         {/* Contador simples */}
         <p className="mb-3 text-sm" style={{ color: 'var(--element-secondary)' }}>
-          {loading ? 'Carregando...' : `Mostrando ${visibleUsers.length} de ${users.length} ${users.length === 1 ? 'usuário' : 'usuários'}`}
+          {loading ? '\u00A0' : `Mostrando ${visibleUsers.length} de ${users.length} ${users.length === 1 ? 'usuário' : 'usuários'}`}
         </p>
 
+        {loading && <SkeletonTable rows={6} cols={4} />}
+
         {/* Tabela */}
-        <div
+        {!loading && <div
           className="rounded-lg border overflow-hidden"
           style={{
             backgroundColor: 'var(--background-primary)',
@@ -314,7 +316,11 @@ export default function UsersPage() {
                     className="py-12 text-center text-sm"
                     style={{ color: 'var(--element-secondary)' }}
                   >
-                    {usersContent.noUsersFound}
+                    <div className="flex flex-col items-center gap-2">
+                      <svg className="w-10 h-10 text-[var(--element-tertiary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                      <p className="font-medium text-[var(--text-primary)]">Nenhum aluno encontrado</p>
+                      <p className="text-xs text-[var(--element-tertiary)] max-w-xs">Cadastre seu primeiro aluno pelo onboarding ou ajuste os filtros de busca.</p>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -328,16 +334,16 @@ export default function UsersPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </div>}
 
         {/* Trigger para scroll infinito */}
         {hasMore && (
           <div 
             ref={observerTarget}
-            className="py-4 text-center text-sm"
-            style={{ color: 'var(--element-secondary)' }}
+            className="py-4 flex justify-center"
           >
-            Carregando mais usuários...
+            <div className="animate-spin w-5 h-5 border-2 border-t-transparent rounded-full"
+                 style={{ borderColor: 'var(--element-secondary)', borderTopColor: 'transparent' }} />
           </div>
         )}
       </div>
@@ -345,7 +351,7 @@ export default function UsersPage() {
       {/* Modal de geração de link */}
       {showInviteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <Card className="w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
+          <Card className="w-full max-w-2xl mx-4 p-6 max-h-[90vh] overflow-y-auto">
             <InviteGenerator onClose={() => setShowInviteModal(false)} />
           </Card>
         </div>

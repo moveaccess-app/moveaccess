@@ -1,12 +1,14 @@
 /**
  * Serviço de Autenticação - Supabase
  * Interface compatível com authMock para facilitar migração
- * 
- * NOTA: Usa fetch() direto ao invés do SDK para evitar problemas
- * de Promise hanging no Next.js 16
+ *
+ * Usa o client browser do Supabase para persistir a sessão de forma
+ * compatível com o middleware SSR, enquanto mantém fetch direto para
+ * leitura de perfil e lookups auxiliares.
  */
 
-import type { Views } from '@/lib/supabase/types';
+import type { Tables } from '@/lib/supabase/types';
+import { createClient } from '@/lib/supabase/client';
 
 // Helper para gerar a chave do localStorage (mesmo padrão do Supabase SDK)
 function getStorageKey(): string {
@@ -29,12 +31,14 @@ export interface BaseUser {
   user_type: UserType;
   avatar?: string;
   created_at: string;
+  setup_completed?: boolean;
 }
 
 export interface StaffUser extends BaseUser {
   user_type: 'staff';
   role: StaffRole;
   permissions: string[];
+  staff_status?: string | null;
 }
 
 export interface StudentUser extends BaseUser {
@@ -44,6 +48,7 @@ export interface StudentUser extends BaseUser {
   plan_name?: string;
   plan_status?: PlanStatus;
   plan_expires_at?: string;
+  student_status?: string | null;
 }
 
 export type AuthUser = StaffUser | StudentUser;
@@ -64,12 +69,43 @@ export interface LoginResult {
 // HELPERS
 // ============================================
 
-type MyProfile = Views<'my_profile'>;
+type MyProfile = Tables<'my_profile'>;
+
+function toIsoExpiry(expiresAtSeconds?: number | null): string {
+  const expiresAt = expiresAtSeconds ?? Math.floor(Date.now() / 1000) + 3600;
+  return new Date(expiresAt * 1000).toISOString();
+}
+
+async function fetchMyProfile(accessToken: string): Promise<MyProfile | null> {
+  const profileUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/my_profile?select=*`;
+  const profileResponse = await fetch(profileUrl, {
+    headers: {
+      'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      'Authorization': `Bearer ${accessToken}`,
+    },
+  });
+
+  if (!profileResponse.ok) {
+    return null;
+  }
+
+  const profileData = await profileResponse.json();
+  const profile = Array.isArray(profileData) ? profileData[0] : profileData;
+
+  if (!profile || profile.error) {
+    return null;
+  }
+
+  return profile as MyProfile;
+}
 
 /**
  * Converte profile do Supabase para o formato AuthUser esperado pela UI
  */
 function profileToAuthUser(profile: MyProfile): AuthUser {
+  // setup_completed comes from the updated my_profile view
+  const setupCompleted = (profile as Record<string, unknown>).setup_completed;
+
   if (profile.user_type === 'staff') {
     return {
       id: profile.id!,
@@ -78,8 +114,10 @@ function profileToAuthUser(profile: MyProfile): AuthUser {
       user_type: 'staff',
       role: (profile.role as StaffRole) || 'receptionist',
       permissions: profile.custom_permissions || [],
+      staff_status: profile.staff_status || null,
       avatar: profile.avatar_url || undefined,
       created_at: profile.created_at || new Date().toISOString(),
+      setup_completed: typeof setupCompleted === 'boolean' ? setupCompleted : true,
     };
   }
 
@@ -93,6 +131,7 @@ function profileToAuthUser(profile: MyProfile): AuthUser {
     plan_name: profile.plan_name || undefined,
     plan_status: (profile.plan_status as PlanStatus) || undefined,
     plan_expires_at: profile.plan_expires_at || undefined,
+    student_status: profile.student_status || null,
     avatar: profile.avatar_url || undefined,
     created_at: profile.created_at || new Date().toISOString(),
   };
@@ -110,36 +149,20 @@ export async function loginStaff(
   password: string
 ): Promise<LoginResult> {
   try {
-    // Usar fetch direto para evitar SDK travando
-    const signInUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/token?grant_type=password`;
-    const signInResponse = await fetch(signInUrl, {
-      method: 'POST',
-      headers: {
-        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password }),
+    const supabase = createClient();
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
     });
 
-    const signInData = await signInResponse.json();
-
-    if (signInData.error || !signInData.access_token) {
-      return { success: false, error: signInData.error_description || signInData.error || 'Erro na autenticação' };
+    if (error || !data.session?.access_token) {
+      return { success: false, error: error?.message || 'Erro na autenticação' };
     }
 
-    // Buscar perfil completo via fetch
-    const profileUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/my_profile?select=*`;
-    const profileResponse = await fetch(profileUrl, {
-      headers: {
-        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        'Authorization': `Bearer ${signInData.access_token}`,
-      },
-    });
-    
-    const profileData = await profileResponse.json();
-    const profile = Array.isArray(profileData) ? profileData[0] : profileData;
+    const profile = await fetchMyProfile(data.session.access_token);
 
-    if (!profile || profile.error) {
+    if (!profile) {
+      await supabase.auth.signOut();
       return { success: false, error: 'Perfil não encontrado' };
     }
 
@@ -154,11 +177,11 @@ export async function loginStaff(
     }
 
     // Atualizar last_login via fetch
-    await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/staff_profiles?id=eq.${signInData.user.id}`, {
+    await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/staff_profiles?id=eq.${data.user.id}`, {
       method: 'PATCH',
       headers: {
         'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        'Authorization': `Bearer ${signInData.access_token}`,
+        'Authorization': `Bearer ${data.session.access_token}`,
         'Content-Type': 'application/json',
         'Prefer': 'return=minimal',
       },
@@ -168,22 +191,9 @@ export async function loginStaff(
     const authUser = profileToAuthUser(profile);
     const session: AuthSession = {
       user: authUser,
-      access_token: signInData.access_token,
-      expires_at: new Date(signInData.expires_at * 1000).toISOString(),
+      access_token: data.session.access_token,
+      expires_at: toIsoExpiry(data.session.expires_at),
     };
-
-    // Salvar sessão no storage para persistência
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(
-        `sb-${process.env.NEXT_PUBLIC_SUPABASE_URL?.split('//')[1]?.split('.')[0]}-auth-token`,
-        JSON.stringify({
-          access_token: signInData.access_token,
-          refresh_token: signInData.refresh_token,
-          expires_at: signInData.expires_at,
-          user: signInData.user,
-        })
-      );
-    }
 
     return { success: true, session };
   } catch (err) {
@@ -225,36 +235,20 @@ export async function loginStudent(
       email = profiles[0].email;
     }
 
-    // Autenticar via fetch
-    const signInUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/token?grant_type=password`;
-    const signInResponse = await fetch(signInUrl, {
-      method: 'POST',
-      headers: {
-        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ email, password }),
+    const supabase = createClient();
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
     });
 
-    const signInData = await signInResponse.json();
-
-    if (signInData.error || !signInData.access_token) {
-      return { success: false, error: signInData.error_description || signInData.error || 'Erro na autenticação' };
+    if (error || !data.session?.access_token) {
+      return { success: false, error: error?.message || 'Erro na autenticação' };
     }
 
-    // Buscar perfil completo
-    const profileUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/my_profile?select=*`;
-    const profileResponse = await fetch(profileUrl, {
-      headers: {
-        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        'Authorization': `Bearer ${signInData.access_token}`,
-      },
-    });
-    
-    const profileData = await profileResponse.json();
-    const profile = Array.isArray(profileData) ? profileData[0] : profileData;
+    const profile = await fetchMyProfile(data.session.access_token);
 
-    if (!profile || profile.error) {
+    if (!profile) {
+      await supabase.auth.signOut();
       return { success: false, error: 'Perfil não encontrado' };
     }
 
@@ -271,22 +265,9 @@ export async function loginStudent(
     const authUser = profileToAuthUser(profile);
     const session: AuthSession = {
       user: authUser,
-      access_token: signInData.access_token,
-      expires_at: new Date(signInData.expires_at * 1000).toISOString(),
+      access_token: data.session.access_token,
+      expires_at: toIsoExpiry(data.session.expires_at),
     };
-
-    // Salvar sessão no storage para persistência
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(
-        `sb-${process.env.NEXT_PUBLIC_SUPABASE_URL?.split('//')[1]?.split('.')[0]}-auth-token`,
-        JSON.stringify({
-          access_token: signInData.access_token,
-          refresh_token: signInData.refresh_token,
-          expires_at: signInData.expires_at,
-          user: signInData.user,
-        })
-      );
-    }
 
     return { success: true, session };
   } catch (err) {
@@ -305,57 +286,26 @@ export async function getCurrentSession(): Promise<AuthSession | null> {
   }
 
   try {
-    // Recuperar sessão do localStorage
-    const storageKey = getStorageKey();
-    const storedSession = localStorage.getItem(storageKey);
-    if (!storedSession) {
+    const supabase = createClient();
+    const { data, error } = await supabase.auth.getSession();
+    const activeSession = data.session;
+
+    if (error || !activeSession?.access_token) {
       return null;
     }
 
-    const sessionData = JSON.parse(storedSession);
-    const accessToken = sessionData.access_token;
-
-    if (!accessToken) {
-      return null;
-    }
-
-    // Verificar se expirou
-    const expiresAt = sessionData.expires_at;
-    if (expiresAt && Date.now() / 1000 > expiresAt) {
-      // Token expirado, limpar
-      localStorage.removeItem(storageKey);
-      return null;
-    }
-
-    // Buscar perfil usando o token
-    const profileUrl = `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/my_profile?select=*`;
-    const profileResponse = await fetch(profileUrl, {
-      method: 'GET',
-      headers: {
-        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!profileResponse.ok) {
-      // Token inválido, limpar sessão
-      localStorage.removeItem(storageKey);
-      return null;
-    }
-
-    const profiles = await profileResponse.json();
-    const profile = Array.isArray(profiles) ? profiles[0] : profiles;
+    const profile = await fetchMyProfile(activeSession.access_token);
 
     if (!profile) {
+      await supabase.auth.signOut();
       return null;
     }
 
     const authUser = profileToAuthUser(profile);
     return {
       user: authUser,
-      access_token: accessToken,
-      expires_at: new Date(expiresAt * 1000).toISOString(),
+      access_token: activeSession.access_token,
+      expires_at: toIsoExpiry(activeSession.expires_at),
     };
   } catch {
     return null;
@@ -412,27 +362,10 @@ export async function logout(): Promise<void> {
 
   const storageKey = getStorageKey();
 
-  // Tentar fazer logout na API do Supabase
-  const storedSession = localStorage.getItem(storageKey);
-  if (storedSession) {
-    try {
-      const sessionData = JSON.parse(storedSession);
-      const accessToken = sessionData.access_token;
-      
-      if (accessToken) {
-        // Chamar logout no Supabase
-        await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1/logout`, {
-          method: 'POST',
-          headers: {
-            'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-            'Authorization': `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-        });
-      }
-    } catch {
-      // Ignorar erros de logout na API
-    }
+  try {
+    await createClient().auth.signOut();
+  } catch {
+    // Ignorar erros de logout no SDK
   }
 
   // Sempre limpar localStorage
@@ -441,7 +374,6 @@ export async function logout(): Promise<void> {
 
 /**
  * Escuta mudanças de autenticação
- * Nota: Usa polling simples ao invés do SDK
  */
 export function onAuthStateChange(
   callback: (session: AuthSession | null) => void
@@ -450,36 +382,30 @@ export function onAuthStateChange(
     return () => {};
   }
 
-  const storageKey = getStorageKey();
-  let lastSession: string | null = null;
-
-  // Verificar sessão a cada 1 segundo
-  const interval = setInterval(async () => {
-    const currentStored = localStorage.getItem(storageKey);
-    
-    // Se mudou, notificar
-    if (currentStored !== lastSession) {
-      lastSession = currentStored;
-      
-      if (currentStored) {
-        const session = await getCurrentSession();
-        callback(session);
-      } else {
-        callback(null);
-      }
+  const supabase = createClient();
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange(async (_event, activeSession) => {
+    if (!activeSession?.access_token) {
+      callback(null);
+      return;
     }
-  }, 1000);
 
-  // Também escutar eventos de storage (para outras abas)
-  const handleStorage = (e: StorageEvent) => {
-    if (e.key === storageKey) {
-      getCurrentSession().then(callback);
+    const profile = await fetchMyProfile(activeSession.access_token);
+
+    if (!profile) {
+      callback(null);
+      return;
     }
-  };
-  window.addEventListener('storage', handleStorage);
+
+    callback({
+      user: profileToAuthUser(profile),
+      access_token: activeSession.access_token,
+      expires_at: toIsoExpiry(activeSession.expires_at),
+    });
+  });
 
   return () => {
-    clearInterval(interval);
-    window.removeEventListener('storage', handleStorage);
+    subscription.unsubscribe();
   };
 }

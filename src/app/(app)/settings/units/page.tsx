@@ -7,6 +7,8 @@ import { Header } from '@/components/common/Header';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { toast } from 'sonner';
 import { getUnits, deleteUnit, type Unit, type UnitStatus } from '@/lib/settings';
 
 const STATUS_LABELS: Record<UnitStatus, { label: string; variant: 'success' | 'default' | 'warning' }> = {
@@ -93,13 +95,13 @@ export default function UnitsPage() {
   }, []);
 
   const handleDelete = async (id: string) => {
-    if (confirm('Deseja remover esta unidade?')) {
-      const result = await deleteUnit(id);
-      if (result.success) {
-        loadUnits(); // Recarrega a lista
-      } else {
-        alert('Erro ao remover unidade');
-      }
+    if (!window.confirm('Deseja remover esta unidade?')) return;
+    const result = await deleteUnit(id);
+    if (result.success) {
+      toast.success('Unidade removida.');
+      loadUnits();
+    } else {
+      toast.error('Erro ao remover unidade.');
     }
   };
 
@@ -127,9 +129,17 @@ export default function UnitsPage() {
 
           {/* Loading */}
           {loading ? (
-            <Card className="p-8 text-center">
-              <p className="text-[var(--element-secondary)]">Carregando unidades...</p>
-            </Card>
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="rounded-lg border border-[var(--divider-primary)] bg-[var(--background-primary)] p-5 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <Skeleton height="h-5" width="w-32" />
+                    <Skeleton height="h-5" width="w-16" className="rounded-full" />
+                  </div>
+                  <Skeleton height="h-4" width="w-48" />
+                </div>
+              ))}
+            </div>
           ) : (
             <>
               {/* Header */}

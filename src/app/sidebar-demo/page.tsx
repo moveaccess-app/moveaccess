@@ -1,3 +1,5 @@
+'use client';
+
 /**
  * Página de Demonstração da Nova Sidebar
  * Mostra a Sidebar elegante com perfil de usuário, animações e toggle

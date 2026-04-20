@@ -1,9 +1,9 @@
 import { createClient } from './client';
-import type { Tables, Views } from './types';
+import type { Tables } from './types';
 
-export type MyProfile = Views<'my_profile'>;
-export type StaffWithRole = Views<'staff_with_role'>;
-export type StudentWithStatus = Views<'students_with_status'>;
+export type MyProfile = Tables<'my_profile'>;
+export type StaffWithRole = Tables<'staff_with_role'>;
+export type StudentWithStatus = Tables<'students_with_status'>;
 
 // ============================================
 // AUTH FUNCTIONS
@@ -168,12 +168,22 @@ export interface InviteData {
 export async function validateInvite(token: string): Promise<InviteData | null> {
   const supabase = createClient();
   
-  const { data, error } = await supabase.rpc('validate_invite', {
+  const { data, error } = await supabase.rpc('validate_invite_token', {
     p_token: token,
   });
 
-  if (error || !data) return null;
-  return data as unknown as InviteData;
+  const payload = Array.isArray(data) ? data[0] : null;
+
+  if (error || !payload || !payload.is_valid) return null;
+
+  return {
+    id: payload.invite_id,
+    academy_id: payload.academy_id,
+    unit_id: payload.unit_id ?? null,
+    invite_type: 'student',
+    staff_role: null,
+    discount: null,
+  };
 }
 
 /**
@@ -227,10 +237,10 @@ export async function acceptInvite(
   }
 
   // Criar membership
-  await supabase.from('academy_memberships').insert({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase.from('academy_memberships') as any).insert({
     profile_id: userId,
     academy_id: invite.academy_id,
-    unit_id: invite.unit_id,
     is_primary: true,
   });
 
@@ -249,8 +259,8 @@ export async function acceptInvite(
   }
 
   // Marcar convite como aceito
-  await supabase
-    .from('invites')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await (supabase.from('invites') as any)
     .update({
       status: 'accepted',
       used_count: 1,

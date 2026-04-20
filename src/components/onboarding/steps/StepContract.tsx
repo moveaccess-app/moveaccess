@@ -1,9 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button, Card } from '@/components/ui';
 import { OnboardingSession } from '@/lib/users';
 import { cn } from '@/lib/utils';
+import { resolveVariables, buildContextFromOnboarding } from '@/lib/contracts';
+
+interface ContractTemplateData {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  version: number;
+  publishedAt: string;
+}
 
 interface StepContractProps {
   session: OnboardingSession;
@@ -11,8 +21,8 @@ interface StepContractProps {
   onBack: () => void;
 }
 
-// Texto do contrato mockado
-const contractTerms = `
+// Fallback text used only when no template is configured for the academy
+const FALLBACK_CONTRACT_TEXT = `
 CONTRATO DE PRESTAÇÃO DE SERVIÇOS DE ACADEMIA
 
 CLÁUSULA 1ª - DO OBJETO
@@ -55,6 +65,68 @@ export function StepContract({ session, onNext, onBack }: StepContractProps) {
   );
   const [error, setError] = useState('');
 
+  // Template loading state
+  const [template, setTemplate] = useState<ContractTemplateData | null>(null);
+  const [templateLoading, setTemplateLoading] = useState(true);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function loadTemplate() {
+      setTemplateLoading(true);
+      setTemplateError(null);
+
+      try {
+        const academyId = session.academyId;
+        if (!academyId) {
+          setTemplateError('Academia não identificada');
+          setTemplateLoading(false);
+          return;
+        }
+
+        const res = await fetch(`/api/contract-templates/active?academyId=${academyId}`);
+        if (!res.ok) {
+          setTemplateError('Erro ao carregar contrato');
+          setTemplateLoading(false);
+          return;
+        }
+
+        const data = await res.json();
+        if (data.found && data.template) {
+          setTemplate(data.template);
+        }
+        // If not found, template stays null — we use fallback text
+      } catch {
+        setTemplateError('Erro de conexão ao carregar contrato');
+      } finally {
+        setTemplateLoading(false);
+      }
+    }
+
+    loadTemplate();
+  }, [session.academyId]);
+
+  const userName = session.collectedData.identification?.fullName || 'Usuário';
+  const planName = session.collectedData.planSelection?.planName || 'Plano';
+  const planValue = session.collectedData.planSelection?.value || 0;
+
+  const contractContent = template?.content || FALLBACK_CONTRACT_TEXT;
+
+  // Build context from onboarding session data to resolve variables
+  const variableContext = useMemo(() => buildContextFromOnboarding({
+    studentName: userName !== 'Usuário' ? userName : undefined,
+    studentCpf: session.collectedData.personalData?.document,
+    studentEmail: session.collectedData.identification?.email,
+    planName: planName !== 'Plano' ? planName : undefined,
+    planValue: planValue || undefined,
+    planPeriod: session.collectedData.planSelection?.billingType,
+  }), [userName, planName, planValue, session]);
+
+  // Resolve variables in contract content
+  const resolvedContent = useMemo(
+    () => resolveVariables(contractContent, variableContext),
+    [contractContent, variableContext]
+  );
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -64,17 +136,15 @@ export function StepContract({ session, onNext, onBack }: StepContractProps) {
     }
 
     onNext({
-      contractId: `ctr-${Date.now()}`,
-      contractNumber: `CTR-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
       acceptedTerms: true,
       signedAt: new Date().toISOString(),
       signatureMethod,
+      termsVersion: template ? String(template.version) : '1.0',
+      templateId: template?.id,
+      templateVersion: template?.version,
+      contractContent: resolvedContent, // snapshot with variables resolved
     });
   };
-
-  const userName = session.collectedData.identification?.fullName || 'Usuário';
-  const planName = session.collectedData.planSelection?.planName || 'Plano';
-  const planValue = session.collectedData.planSelection?.value || 0;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -115,14 +185,40 @@ export function StepContract({ session, onNext, onBack }: StepContractProps) {
 
       {/* Contrato */}
       <div className="space-y-2">
-        <h3 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wide">
-          Termos do contrato
-        </h3>
-        <div className="h-64 overflow-y-auto p-4 bg-[var(--background-primary)] border border-[var(--border-default)] rounded-lg">
-          <pre className="text-sm text-[var(--text-secondary)] whitespace-pre-wrap font-sans leading-relaxed">
-            {contractTerms}
-          </pre>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium text-[var(--text-secondary)] uppercase tracking-wide">
+            Termos do contrato
+          </h3>
+          {template && (
+            <span className="text-xs text-[var(--text-tertiary)]">
+              {template.name} — v{template.version}
+            </span>
+          )}
+          {!template && !templateLoading && !templateError && (
+            <span className="text-xs text-[var(--status-warning)]">
+              Contrato padrão (sem template configurado)
+            </span>
+          )}
         </div>
+
+        {templateLoading ? (
+          <div className="h-64 flex items-center justify-center bg-[var(--background-primary)] border border-[var(--border-default)] rounded-lg">
+            <p className="text-sm text-[var(--text-tertiary)]">Carregando contrato...</p>
+          </div>
+        ) : templateError ? (
+          <div className="h-64 flex items-center justify-center bg-[var(--background-primary)] border border-[var(--status-negative)]/30 rounded-lg">
+            <div className="text-center space-y-2">
+              <p className="text-sm text-[var(--status-negative)]">{templateError}</p>
+              <p className="text-xs text-[var(--text-tertiary)]">O contrato não pôde ser carregado. Tente novamente.</p>
+            </div>
+          </div>
+        ) : (
+          <div className="h-64 overflow-y-auto p-4 bg-[var(--background-primary)] border border-[var(--border-default)] rounded-lg">
+            <pre className="text-sm text-[var(--text-secondary)] whitespace-pre-wrap font-sans leading-relaxed">
+              {resolvedContent}
+            </pre>
+          </div>
+        )}
       </div>
 
       {/* Método de assinatura */}

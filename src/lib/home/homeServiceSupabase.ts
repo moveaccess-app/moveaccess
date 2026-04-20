@@ -45,13 +45,39 @@ export interface HomeKpis {
   activeUnits: number;
 }
 
+export interface ActivationChecklist {
+  hasUnit: boolean;
+  hasPlan: boolean;
+  hasPublishedContract: boolean;
+  hasStudent: boolean;
+  hasCheckin: boolean;
+  hasPayment: boolean;
+  hasBilling: boolean;
+  plansCount: number;
+  studentsCount: number;
+  contractsCount: number;
+  checkinsCount: number;
+  paymentsCount: number;
+}
+
+export interface DashboardKpis {
+  pendingPayments: number;
+  monthRevenue: number;
+  overdueStudents: number;
+  checkinsToday: number;
+  newStudentsMonth: number;
+}
+
 export interface HomeData {
   academyName: string;
+  setupCompleted: boolean;
   alerts: PriorityAlert[];
   healthMetric: HealthMetric;
   recentAccesses: AccessHistoryEntry[];
   quickActions: QuickAction[];
   kpis: HomeKpis;
+  activation: ActivationChecklist;
+  dashboard: DashboardKpis;
   accessPlaceholder: string;
 }
 
@@ -59,12 +85,34 @@ interface HomeOverviewRpc {
   success: boolean;
   error_code?: string;
   academy_name?: string | null;
+  setup_completed?: boolean;
   kpis?: {
     total_students?: number;
     active_students?: number;
     open_drafts?: number;
     pending_invites?: number;
     active_units?: number;
+  };
+  activation?: {
+    has_unit?: boolean;
+    has_plan?: boolean;
+    has_published_contract?: boolean;
+    has_student?: boolean;
+    has_checkin?: boolean;
+    has_payment?: boolean;
+    has_billing?: boolean;
+    plans_count?: number;
+    students_count?: number;
+    contracts_count?: number;
+    checkins_count?: number;
+    payments_count?: number;
+  };
+  dashboard?: {
+    pending_payments?: number;
+    month_revenue?: number;
+    overdue_students?: number;
+    checkins_today?: number;
+    new_students_month?: number;
   };
   alerts?: Array<{
     id: string;
@@ -104,6 +152,7 @@ function getAccessToken(): string | null {
 function fallbackData(): HomeData {
   return {
     academyName: 'Academia',
+    setupCompleted: true,
     alerts: [],
     healthMetric: {
       label: 'Alunos ativos',
@@ -141,6 +190,27 @@ function fallbackData(): HomeData {
       openDrafts: 0,
       pendingInvites: 0,
       activeUnits: 0,
+    },
+    activation: {
+      hasUnit: false,
+      hasPlan: false,
+      hasPublishedContract: false,
+      hasStudent: false,
+      hasCheckin: false,
+      hasPayment: false,
+      hasBilling: false,
+      plansCount: 0,
+      studentsCount: 0,
+      contractsCount: 0,
+      checkinsCount: 0,
+      paymentsCount: 0,
+    },
+    dashboard: {
+      pendingPayments: 0,
+      monthRevenue: 0,
+      overdueStudents: 0,
+      checkinsToday: 0,
+      newStudentsMonth: 0,
     },
     accessPlaceholder: 'Sem dados de acesso ainda',
   };
@@ -189,9 +259,35 @@ export async function getHomeData(): Promise<HomeData> {
     activeUnits: rpc.kpis.active_units ?? 0,
   };
 
+  const act = rpc.activation;
+  const activation: ActivationChecklist = {
+    hasUnit: act?.has_unit ?? false,
+    hasPlan: act?.has_plan ?? false,
+    hasPublishedContract: act?.has_published_contract ?? false,
+    hasStudent: act?.has_student ?? false,
+    hasCheckin: act?.has_checkin ?? false,
+    hasPayment: act?.has_payment ?? false,
+    hasBilling: act?.has_billing ?? false,
+    plansCount: act?.plans_count ?? 0,
+    studentsCount: act?.students_count ?? 0,
+    contractsCount: act?.contracts_count ?? 0,
+    checkinsCount: act?.checkins_count ?? 0,
+    paymentsCount: act?.payments_count ?? 0,
+  };
+
+  const dash = rpc.dashboard;
+  const dashboard: DashboardKpis = {
+    pendingPayments: dash?.pending_payments ?? 0,
+    monthRevenue: dash?.month_revenue ?? 0,
+    overdueStudents: dash?.overdue_students ?? 0,
+    checkinsToday: dash?.checkins_today ?? 0,
+    newStudentsMonth: dash?.new_students_month ?? 0,
+  };
+
   return {
     ...fallbackData(),
     academyName: rpc.academy_name || 'Academia',
+    setupCompleted: rpc.setup_completed ?? true,
     alerts: (rpc.alerts || []).slice(0, 6).map((alert) => ({
       ...alert,
       timestamp: new Date(alert.timestamp || Date.now()),
@@ -203,6 +299,8 @@ export async function getHomeData(): Promise<HomeData> {
       trend: 'stable',
     },
     kpis,
+    activation,
+    dashboard,
   };
 }
 

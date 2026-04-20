@@ -86,7 +86,7 @@ export default function DesignSystemExamplePage() {
         <div className="absolute top-20 right-20 w-96 h-96 bg-primary/5 rounded-full blur-[120px] animate-glow-pulse" />
         <div className="absolute bottom-20 left-20 w-64 h-64 bg-primary/10 rounded-full blur-[100px] animate-float" />
 
-        <Container size="wide" className="relative z-10">
+        <Container size="xl" className="relative z-10">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             {/* Conteúdo lado esquerdo */}
             <div className="space-y-6">
@@ -120,10 +120,10 @@ export default function DesignSystemExamplePage() {
                 className="flex flex-col sm:flex-row gap-4 opacity-0 animate-fade-up"
                 style={{ animationDelay: "0.3s", animationFillMode: "forwards" }}
               >
-                <Button variant="hero" size="lg">
+                <Button size="lg">
                   Começar Agora <ArrowRight className="w-4 h-4" />
                 </Button>
-                <Button variant="hero-outline" size="lg">
+                <Button variant="outline" size="lg">
                   Ver Demonstração
                 </Button>
               </div>
@@ -164,7 +164,7 @@ export default function DesignSystemExamplePage() {
 
       {/* Features Section */}
       <section className="section-padding bg-card/30">
-        <Container size="wide">
+        <Container size="xl">
           {/* Header da seção */}
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
@@ -203,7 +203,7 @@ export default function DesignSystemExamplePage() {
 
       {/* Pricing Section */}
       <section className="section-padding">
-        <Container size="wide">
+        <Container size="xl">
           {/* Header */}
           <div className="text-center mb-16">
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4">
@@ -257,7 +257,7 @@ export default function DesignSystemExamplePage() {
 
                 {/* CTA */}
                 <Button
-                  variant={plan.popular ? "hero" : "outline"}
+                  variant={plan.popular ? "default" : "outline"}
                   className="w-full"
                 >
                   Escolher {plan.name}
@@ -273,7 +273,7 @@ export default function DesignSystemExamplePage() {
         {/* Glow decorativo */}
         <div className="absolute inset-0 bg-gradient-glow opacity-50" />
         
-        <Container size="narrow" className="relative z-10">
+        <Container size="md" className="relative z-10">
           <div className="text-center space-y-6">
             <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold">
               Pronto para começar?
@@ -282,10 +282,10 @@ export default function DesignSystemExamplePage() {
               Junte-se a centenas de academias que já transformaram sua gestão
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button variant="hero" size="lg">
+              <Button size="lg">
                 Criar Conta Grátis <ArrowRight className="w-4 h-4" />
               </Button>
-              <Button variant="hero-outline" size="lg">
+              <Button variant="outline" size="lg">
                 Falar com Vendas
               </Button>
             </div>

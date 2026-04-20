@@ -13,10 +13,15 @@ export type {
   Unit, 
   UnitStatus, 
   AcademyStatus,
+  AcademyPreferences,
+  AccessScannerMode,
   Address,
   OperatingHour,
   AccessConfig,
+  DelinquencyPolicy,
 } from './settingsServiceSupabase';
+
+export { DELINQUENCY_POLICY_DEFAULTS } from './settingsServiceSupabase';
 
 function log(...args: unknown[]) {
   if (DEBUG_SETTINGS) {
@@ -46,7 +51,7 @@ export async function getAcademy() {
 export async function updateAcademy(
   updates: Parameters<typeof settingsSupabase.updateAcademy>[0],
   updatedBy: string
-) {
+): Promise<{ success: boolean; academy?: settingsSupabase.Academy; error?: string }> {
   log('updateAcademy', { useSupabase: USE_SUPABASE_SETTINGS, updates });
   
   if (USE_SUPABASE_SETTINGS) {
@@ -59,6 +64,35 @@ export async function updateAcademy(
     success: true, 
     academy: { ...academy, status: 'active' as const }
   };
+}
+
+// ============================================================================
+// DELINQUENCY POLICY
+// ============================================================================
+
+export async function getDelinquencyPolicy() {
+  log('getDelinquencyPolicy', { useSupabase: USE_SUPABASE_SETTINGS });
+
+  if (USE_SUPABASE_SETTINGS) {
+    return settingsSupabase.getDelinquencyPolicy();
+  }
+
+  // Mock fallback — retorna defaults seguros
+  return { ...settingsSupabase.DELINQUENCY_POLICY_DEFAULTS };
+}
+
+export async function updateDelinquencyPolicy(
+  policy: settingsSupabase.DelinquencyPolicy,
+  updatedBy: string
+) {
+  log('updateDelinquencyPolicy', { useSupabase: USE_SUPABASE_SETTINGS, policy });
+
+  if (USE_SUPABASE_SETTINGS) {
+    return settingsSupabase.updateDelinquencyPolicy(policy, updatedBy);
+  }
+
+  // Mock — sem persistência real
+  return { success: true };
 }
 
 // ============================================================================

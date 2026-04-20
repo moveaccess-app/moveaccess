@@ -34,6 +34,11 @@ const icons = {
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
     </svg>
   ),
+  qr: (
+    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm11 0h1m2 0h2m-5 3h3m2 0v3m-5-1h2" />
+    </svg>
+  ),
   plug: (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
@@ -120,7 +125,7 @@ export default function SettingsPage() {
     {
       id: 'academy',
       title: 'Dados da Academia',
-      description: academy ? academy.tradeName : loading ? 'Carregando...' : 'Academia não encontrada',
+      description: academy ? academy.tradeName : loading ? '' : 'Academia não encontrada',
       href: '/settings/academy',
       icon: icons.building,
     },
@@ -141,6 +146,13 @@ export default function SettingsPage() {
       icon: icons.users,
     },
     {
+      id: 'access',
+      title: 'Acesso e Scanner',
+      description: 'Scanner, entrada/saída e regras de presença',
+      href: '/settings/access',
+      icon: icons.qr,
+    },
+    {
       id: 'policies',
       title: 'Regras de Negócio',
       description: 'Cobrança, inadimplência e acesso',
@@ -149,10 +161,10 @@ export default function SettingsPage() {
     },
     {
       id: 'integrations',
-      title: 'Integrações',
-      description: integrations.total > 0
-        ? `${integrations.connected} ${integrations.connected === 1 ? 'integração conectada' : 'integrações conectadas'}`
-        : 'Pagamentos e notificações',
+      title: 'Cobrança & Integrações',
+      description: integrations.connected > 0
+        ? `Asaas conectado${integrations.hasIssue ? ' — requer atenção' : ''}`
+        : 'Configure o Asaas para cobrar seus alunos',
       href: '/settings/integrations',
       icon: icons.plug,
       badge: hasIntegrationIssue ? { label: 'Atenção', variant: 'warning' } : undefined,
@@ -189,7 +201,7 @@ export default function SettingsPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg font-bold text-[var(--element-primary)] truncate">
-                  {loading ? 'Carregando...' : academy?.tradeName || 'Academia'}
+                  {loading ? '\u00A0' : academy?.tradeName || 'Academia'}
                 </h2>
                 <p className="text-sm text-[var(--element-secondary)]">
                   {academy?.address?.city || ''}{academy?.address?.state ? `, ${academy.address.state}` : ''}

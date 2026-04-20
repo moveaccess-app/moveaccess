@@ -3,6 +3,7 @@
 import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/common/Header';
+import { Skeleton, SkeletonCard, SkeletonText } from '@/components/ui/Skeleton';
 import { usersContent } from '@/data/usersContent';
 import {
   getUserById,
@@ -214,8 +215,19 @@ export default function UserDetailPage({ params }: Props) {
     return (
       <div>
         <Header title={usersContent.detailTitle} />
-        <div className="p-8 text-center">
-          <p style={{ color: 'var(--element-secondary)' }}>Carregando...</p>
+        <div className="p-6 space-y-6 max-w-5xl mx-auto">
+          <div className="flex items-center gap-4">
+            <Skeleton circle height="h-16" width="w-16" />
+            <div className="space-y-2 flex-1">
+              <Skeleton height="h-6" width="w-48" />
+              <Skeleton height="h-4" width="w-32" />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+          <SkeletonCard />
         </div>
       </div>
     );

@@ -1,3 +1,5 @@
+import { getActiveAcademyId } from '@/lib/supabase/academyScope';
+
 export type PlanBillingCycle = 'monthly' | 'yearly' | 'custom';
 export type PlanStatus = 'active' | 'inactive';
 
@@ -32,10 +34,6 @@ export interface PlanInput {
   billingCycle: PlanBillingCycle;
   status?: PlanStatus;
   accessRules?: PlanAccessRules;
-}
-
-interface MyProfileRow {
-  academy_ids?: string[] | null;
 }
 
 interface DbPlanRow {
@@ -128,18 +126,6 @@ async function fetchSupabase<T>(
   }
 }
 
-async function getCurrentAcademyId(): Promise<string | null> {
-  const { data, error } = await fetchSupabase<MyProfileRow[]>(
-    'my_profile?select=academy_ids'
-  );
-
-  if (error || !data?.[0]?.academy_ids?.[0]) {
-    return null;
-  }
-
-  return data[0].academy_ids[0];
-}
-
 function normalizeAccessRules(value: PlanAccessRules | null | undefined): PlanAccessRules {
   if (!value || typeof value !== 'object') {
     return {};
@@ -217,7 +203,7 @@ export async function getPlanById(id: string): Promise<Plan | null> {
 }
 
 export async function createPlan(input: PlanInput): Promise<{ success: boolean; plan?: Plan; error?: string }> {
-  const academyId = await getCurrentAcademyId();
+  const academyId = await getActiveAcademyId();
 
   if (!academyId) {
     return { success: false, error: 'Academia não encontrada para o usuário logado.' };

@@ -7,9 +7,11 @@
  */
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import * as authService from '@/lib/auth/authService';
 import type { AuthUser, AuthSession, LoginResult, UserType } from '@/lib/auth/authService';
+import type { CurrentUser } from '@/lib/auth/currentUserContract';
+import { mapSessionToCurrentUser } from '@/lib/auth/currentUserContract';
 
 // Re-exportar tipos
 export type { UserType, LoginResult };
@@ -20,7 +22,7 @@ export type { UserType, LoginResult };
 
 interface AuthContextType {
   // Estado
-  user: AuthUser | null;
+  currentUser: CurrentUser | null;
   session: AuthSession | null;
   userType: UserType | null;
   isLoading: boolean;
@@ -51,7 +53,8 @@ interface AuthProviderProps {
 
 export function AuthProvider({ children }: AuthProviderProps) {
   const router = useRouter();
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const pathname = usePathname();
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -61,7 +64,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       const currentSession = await authService.getCurrentSession();
       setSession(currentSession);
-      setUser(currentSession?.user ?? null);
+      setCurrentUser(mapSessionToCurrentUser(currentSession));
     } finally {
       setIsLoading(false);
     }
@@ -73,15 +76,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     const unsubscribe = authService.onAuthStateChange((newSession) => {
       setSession(newSession);
-      setUser(newSession?.user ?? null);
+      setCurrentUser(mapSessionToCurrentUser(newSession));
 
       if (!newSession) {
-        router.push('/login');
+        const isStudentArea = pathname?.startsWith('/aluno') || pathname?.startsWith('/cadastro');
+        router.push(isStudentArea ? '/aluno/login' : '/login');
       }
     });
 
     return () => unsubscribe();
-  }, [refreshSession, router]);
+  }, [pathname, refreshSession, router]);
 
   // Login da equipe
   const loginAsStaff = useCallback(async (email: string, password: string): Promise<LoginResult> => {
@@ -92,7 +96,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       if (result.success && result.session) {
         setSession(result.session);
-        setUser(result.session.user);
+        setCurrentUser(mapSessionToCurrentUser(result.session));
       }
 
       return result;
@@ -110,7 +114,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       if (result.success && result.session) {
         setSession(result.session);
-        setUser(result.session.user);
+        setCurrentUser(mapSessionToCurrentUser(result.session));
       }
 
       return result;
@@ -121,25 +125,25 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   // Logout
   const logout = useCallback(async () => {
-    const wasStaff = user?.user_type === 'staff';
+    const wasStaff = currentUser?.profile.userType === 'staff';
     
     await authService.logout();
     
     setSession(null);
-    setUser(null);
+    setCurrentUser(null);
     
     // Redirecionar baseado no tipo de usuário anterior
     router.push(wasStaff ? '/login' : '/aluno/login');
-  }, [user, router]);
+  }, [currentUser, router]);
 
   // Valores computados
-  const userType: UserType | null = user?.user_type ?? null;
-  const isAuthenticated = !!session && !!user;
-  const isStaff = isAuthenticated && user?.user_type === 'staff';
-  const isStudent = isAuthenticated && user?.user_type === 'student';
+  const userType: UserType | null = currentUser?.profile.userType ?? null;
+  const isAuthenticated = !!session && !!currentUser;
+  const isStaff = isAuthenticated && currentUser?.profile.userType === 'staff';
+  const isStudent = isAuthenticated && currentUser?.profile.userType === 'student';
 
   const value: AuthContextType = {
-    user,
+    currentUser,
     session,
     userType,
     isLoading,

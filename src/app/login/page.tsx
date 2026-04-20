@@ -8,8 +8,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button, Input, Label, Card, CardContent, CardHeader, CardTitle, CardDescription, Logo } from '@/components/ui';
 import { useAuth } from '@/contexts/AuthContext';
+import { capture } from '@/lib/analytics';
 import { Lock, Mail } from 'lucide-react';
 
 export default function StaffLoginPage() {
@@ -38,11 +40,15 @@ export default function StaffLoginPage() {
       const result = await loginAsStaff(email, password);
 
       if (result.success) {
+        capture('login_success', { user_type: 'staff' });
         router.push('/home');
       } else {
-        setError(result.error || 'Erro ao fazer login');
+        const errorMsg = result.error || 'Erro ao fazer login';
+        capture('login_failed', { user_type: 'staff', error: errorMsg });
+        setError(errorMsg);
       }
     } catch {
+      capture('login_failed', { user_type: 'staff', error: 'unexpected_error' });
       setError('Erro inesperado. Tente novamente.');
     } finally {
       setIsLoading(false);
@@ -106,6 +112,7 @@ export default function StaffLoginPage() {
                     onChange={(e) => setEmail(e.target.value)}
                     required
                     autoComplete="email"
+                    autoFocus
                     disabled={isLoading}
                     className="pl-11 h-12 text-base"
                   />
@@ -176,40 +183,52 @@ export default function StaffLoginPage() {
               </Button>
             </form>
 
-            {/* Credenciais de Demo */}
-            <div 
-              className="mt-8 p-5 rounded-xl text-xs border"
-              style={{ 
-                backgroundColor: 'var(--background-secondary)',
-                borderColor: 'var(--divider-primary)'
-              }}
-            >
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--status-info)' }} />
-                <p className="font-semibold text-sm" style={{ color: 'var(--element-primary)' }}>
-                  Credenciais de demonstração
-                </p>
+            {/* Credenciais de Demo — somente em dev */}
+            {process.env.NODE_ENV === 'development' && (
+              <div 
+                className="mt-8 p-5 rounded-xl text-xs border"
+                style={{ 
+                  backgroundColor: 'var(--background-secondary)',
+                  borderColor: 'var(--divider-primary)'
+                }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: 'var(--status-info)' }} />
+                  <p className="font-semibold text-sm" style={{ color: 'var(--element-primary)' }}>
+                    Credenciais de demonstração
+                  </p>
+                </div>
+                <div className="space-y-2 ml-4">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold min-w-[80px]" style={{ color: 'var(--element-primary)' }}>Admin:</span>
+                    <span style={{ color: 'var(--element-secondary)' }}>admin@moveaccess.com / Admin@123</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold min-w-[80px]" style={{ color: 'var(--element-primary)' }}>Gerente:</span>
+                    <span style={{ color: 'var(--element-secondary)' }}>gerente@moveaccess.com / Gerente@123</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold min-w-[80px]" style={{ color: 'var(--element-primary)' }}>Recepção:</span>
+                    <span style={{ color: 'var(--element-secondary)' }}>recepcionista@moveaccess.com / Recep@123</span>
+                  </div>
+                </div>
               </div>
-              <div className="space-y-2 ml-4">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold min-w-[80px]" style={{ color: 'var(--element-primary)' }}>Admin:</span>
-                  <span style={{ color: 'var(--element-secondary)' }}>admin@moveaccess.com / Admin@123</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold min-w-[80px]" style={{ color: 'var(--element-primary)' }}>Gerente:</span>
-                  <span style={{ color: 'var(--element-secondary)' }}>gerente@moveaccess.com / Gerente@123</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold min-w-[80px]" style={{ color: 'var(--element-primary)' }}>Recepção:</span>
-                  <span style={{ color: 'var(--element-secondary)' }}>recepcionista@moveaccess.com / Recep@123</span>
-                </div>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
 
         {/* Link para login do aluno */}
         <div className="mt-8 text-center space-y-3">
+          <p className="text-sm" style={{ color: 'var(--element-secondary)' }}>
+            Ainda não tem conta?{' '}
+            <Link
+              href="/signup"
+              className="font-semibold hover:underline transition-all"
+              style={{ color: 'var(--status-info)' }}
+            >
+              Cadastrar minha academia
+            </Link>
+          </p>
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px" style={{ backgroundColor: 'var(--divider-primary)' }} />
             <span className="text-xs font-medium" style={{ color: 'var(--element-disabled)' }}>OU</span>
@@ -217,13 +236,13 @@ export default function StaffLoginPage() {
           </div>
           <p className="text-sm" style={{ color: 'var(--element-secondary)' }}>
             É aluno?{' '}
-            <a 
+            <Link 
               href="/aluno/login" 
               className="font-semibold hover:underline transition-all"
               style={{ color: 'var(--status-info)' }}
             >
               Acesse sua área aqui →
-            </a>
+            </Link>
           </p>
         </div>
       </div>

@@ -5,6 +5,20 @@ import Link from 'next/link';
 import { Header } from '@/components/common/Header';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
+import { Skeleton } from '@/components/ui/Skeleton';
+import {
+  Users,
+  ShieldOff,
+  Zap,
+  Check,
+  X,
+  ChevronRight,
+  Clock,
+  ClipboardList,
+  KeyRound,
+  QrCode,
+  Settings,
+} from 'lucide-react';
 import {
   getAccessOverview,
   formatAccessTime,
@@ -13,61 +27,7 @@ import {
   getAccessStatusLabel,
   type AccessAttempt,
   type AccessOverview,
-} from '@/lib/access/accessService';
-
-// Ícones inline SVG
-const icons = {
-  users: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
-    </svg>
-  ),
-  block: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-    </svg>
-  ),
-  activity: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-    </svg>
-  ),
-  check: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-    </svg>
-  ),
-  x: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  ),
-  arrowRight: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-    </svg>
-  ),
-  clock: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  log: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-    </svg>
-  ),
-  manual: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
-    </svg>
-  ),
-  qr: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
-    </svg>
-  ),
-};
+} from '@/lib/access';
 
 // KPI Card Component
 function KPICard({
@@ -145,7 +105,7 @@ function QuickActionCard({
             <p className="text-xs text-[var(--element-secondary)] truncate">{description}</p>
           </div>
           <div className="text-[var(--element-disabled)] group-hover:text-[var(--element-primary)] transition-colors">
-            {icons.arrowRight}
+            <ChevronRight className="w-4 h-4" />
           </div>
         </div>
       </Card>
@@ -156,10 +116,10 @@ function QuickActionCard({
 // Access Log Item
 function AccessLogItem({ attempt }: { attempt: AccessAttempt }) {
   const isAllowed = attempt.status === 'allowed';
+  const eventLabel = attempt.eventType === 'entry' ? 'Entrada' : attempt.eventType === 'exit' ? 'Saída' : null;
 
   return (
     <div className="flex items-center gap-3 py-3 border-b border-[var(--divider-primary)] last:border-0">
-      {/* Status Icon */}
       <div
         className={`p-1.5 rounded-full flex-shrink-0 ${
           isAllowed
@@ -167,10 +127,9 @@ function AccessLogItem({ attempt }: { attempt: AccessAttempt }) {
             : 'bg-[var(--status-negative-background)] text-[var(--status-negative)]'
         }`}
       >
-        {isAllowed ? icons.check : icons.x}
+        {isAllowed ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
       </div>
 
-      {/* Info */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-[var(--element-primary)] truncate">
           {attempt.userName || 'Usuário desconhecido'}
@@ -179,10 +138,15 @@ function AccessLogItem({ attempt }: { attempt: AccessAttempt }) {
           <span>{formatCpfMasked(attempt.userCpf || '')}</span>
           <span>•</span>
           <span>{getAccessMethodLabel(attempt.method)}</span>
+          {eventLabel && (
+            <>
+              <span>•</span>
+              <span>{eventLabel}</span>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Status Badge */}
       <Badge
         variant={isAllowed ? 'default' : 'destructive'}
         className="flex-shrink-0 text-xs"
@@ -190,9 +154,8 @@ function AccessLogItem({ attempt }: { attempt: AccessAttempt }) {
         {getAccessStatusLabel(attempt.status)}
       </Badge>
 
-      {/* Time */}
       <div className="flex items-center gap-1 text-xs text-[var(--element-disabled)] flex-shrink-0">
-        {icons.clock}
+        <Clock className="w-3.5 h-3.5" />
         <span>{formatAccessTime(attempt.timestamp)}</span>
       </div>
     </div>
@@ -227,21 +190,21 @@ export default function AccessOverviewPage() {
             title="Acessos Hoje"
             value={isLoading ? '—' : overview?.accessesToday || 0}
             subtitle="Registros do dia atual"
-            icon={icons.users}
+            icon={<Users className="w-5 h-5" />}
             variant="success"
           />
           <KPICard
             title="Liberados Hoje"
             value={isLoading ? '—' : overview?.allowedToday || 0}
             subtitle="Entradas aprovadas"
-            icon={icons.activity}
+            icon={<Zap className="w-5 h-5" />}
             variant="default"
           />
           <KPICard
             title="Negados Hoje"
             value={isLoading ? '—' : overview?.deniedToday || 0}
             subtitle="Tentativas negadas"
-            icon={icons.block}
+            icon={<ShieldOff className="w-5 h-5" />}
             variant="destructive"
           />
         </div>
@@ -251,24 +214,30 @@ export default function AccessOverviewPage() {
           <h2 className="text-lg font-semibold text-[var(--element-primary)] mb-3">
             Ações Rápidas
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <QuickActionCard
+              title="Abrir Scanner"
+              description="Ler QR do aluno e validar acesso"
+              icon={<QrCode className="w-5 h-5" />}
+              href="/scanner?flow=entry"
+            />
             <QuickActionCard
               title="Log de Acessos"
               description="Histórico completo de entradas"
-              icon={icons.log}
+              icon={<ClipboardList className="w-5 h-5" />}
               href="/access/log"
             />
             <QuickActionCard
-              title="Liberação Manual"
-              description="Liberar acesso sem QR/PIN"
-              icon={icons.manual}
-              href="/access/releases"
+              title="Check-in Manual"
+              description="Registrar acesso por CPF ou nome"
+              icon={<KeyRound className="w-5 h-5" />}
+              href="/acesso/checkin"
             />
             <QuickActionCard
-              title="Config. QR Code"
-              description="Gerenciar QR das unidades"
-              icon={icons.qr}
-              href="/access/releases"
+              title="Config. de Acesso"
+              description="Scanner, entrada/saída e regras de presença"
+              icon={<Settings className="w-5 h-5" />}
+              href="/settings/access"
             />
           </div>
         </div>
@@ -284,7 +253,7 @@ export default function AccessOverviewPage() {
               className="text-sm text-[var(--element-accent)] hover:underline flex items-center gap-1"
             >
               Ver todos
-              {icons.arrowRight}
+              <ChevronRight className="w-4 h-4" />
             </Link>
           </div>
 
@@ -295,14 +264,23 @@ export default function AccessOverviewPage() {
               ))}
             </div>
           ) : isLoading ? (
-            <div className="text-center py-8">
-              <p className="text-[var(--element-secondary)]">Carregando acessos...</p>
+            <div className="space-y-3 py-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 px-4 py-3">
+                  <Skeleton circle height="h-9" width="w-9" />
+                  <div className="flex-1 space-y-1.5">
+                    <Skeleton height="h-4" width="w-32" />
+                    <Skeleton height="h-3" width="w-20" />
+                  </div>
+                  <Skeleton height="h-5" width="w-16" className="rounded-full" />
+                </div>
+              ))}
             </div>
           ) : (
-            <div className="text-center py-8">
-              <p className="text-[var(--element-secondary)]">
-                Nenhum acesso registrado ainda.
-              </p>
+            <div className="text-center py-10">
+              <QrCode className="w-10 h-10 mx-auto text-[var(--element-tertiary)] mb-2" strokeWidth={1.5} />
+              <p className="text-sm font-medium text-[var(--text-primary)]">Nenhum acesso registrado</p>
+              <p className="text-xs text-[var(--element-tertiary)] mt-1">Os check-ins dos alunos aparecerão aqui em tempo real.</p>
             </div>
           )}
         </Card>

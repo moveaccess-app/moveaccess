@@ -8,6 +8,8 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
+import { SkeletonCard } from '@/components/ui/Skeleton';
+import { toast } from 'sonner';
 import {
   getUnitById,
   createUnit,
@@ -16,6 +18,8 @@ import {
   type Unit,
 } from '@/lib/settings';
 import { getCurrentSession } from '@/lib/auth/authService';
+
+type NestedUnitField = 'address' | 'accessConfig';
 
 const DAYS_OF_WEEK = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
@@ -98,9 +102,10 @@ export default function UnitDetailPage() {
   if (loading) {
     return (
       <div className="flex flex-col h-full bg-[var(--background-secondary)]">
-        <Header title="Carregando..." />
-        <div className="flex-1 flex items-center justify-center">
-          <p className="text-[var(--element-secondary)]">Carregando unidade...</p>
+        <Header title="Unidade" />
+        <div className="p-4 lg:p-6 max-w-3xl mx-auto w-full space-y-4">
+          <SkeletonCard />
+          <SkeletonCard />
         </div>
       </div>
     );
@@ -114,13 +119,17 @@ export default function UnitDetailPage() {
 
     if (field.includes('.')) {
       const [parent, child] = field.split('.');
-      setFormData((prev) => prev && ({
-        ...prev,
-        [parent]: {
-          ...(prev[parent as keyof typeof prev] as Record<string, unknown>),
-          [child]: value,
-        },
-      }));
+      if (parent === 'address' || parent === 'accessConfig') {
+        const nestedParent = parent as NestedUnitField;
+
+        setFormData((prev) => prev && ({
+          ...prev,
+          [nestedParent]: {
+            ...prev[nestedParent],
+            [child]: value,
+          },
+        }));
+      }
     } else {
       setFormData((prev) => prev && ({ ...prev, [field]: value }));
     }
@@ -162,7 +171,7 @@ export default function UnitDetailPage() {
 
       if (result.success) {
         setHasChanges(false);
-        // Sempre redireciona para a lista de unidades após salvar
+        toast.success(isNew ? 'Unidade criada com sucesso.' : 'Unidade atualizada.');
         setTimeout(() => router.push('/settings/units'), 500);
       } else {
         setErrorMessage(result.error || 'Não foi possível salvar a unidade. Tente novamente.');

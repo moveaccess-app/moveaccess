@@ -4,7 +4,9 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/common/Header';
 import { Input, Button, Card, Label } from '@/components/ui';
+import { toast } from 'sonner';
 import { createPlan } from '@/lib/plans/plansService';
+import { capture } from '@/lib/analytics';
 import {
   createEmptyPlanFormValues,
   formValuesToPlanInput,
@@ -34,7 +36,7 @@ export default function NewPlanPage() {
 
   const handleSave = async () => {
     if (!values.name.trim()) {
-      alert('Informe o nome do plano.');
+      toast.error('Informe o nome do plano.');
       return;
     }
 
@@ -43,11 +45,12 @@ export default function NewPlanPage() {
     setSaving(false);
 
     if (!result.success || !result.plan) {
-      alert(result.error || 'Não foi possível criar o plano.');
+      toast.error(result.error || 'Não foi possível criar o plano.');
       return;
     }
 
-    alert('Plano criado com sucesso.');
+    toast.success('Plano criado com sucesso.');
+    capture('first_plan_created', {});
     router.push(`/plans/${result.plan.id}`);
   };
 
@@ -110,28 +113,8 @@ export default function NewPlanPage() {
           </div>
         </Section>
 
-        <Section title="Regras de acesso" description="Campos simples para popular o JSON de regras do plano.">
+        <Section title="Regras de acesso" description="Após criar o plano, você poderá configurar restrições de unidade, dia e horário na página de detalhes.">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="allowedDays">Dias permitidos</Label>
-              <Input id="allowedDays" value={values.allowedDays} onChange={(e) => updateField('allowedDays', e.target.value)} placeholder="Ex: 1,2,3,4,5" />
-            </div>
-
-            <div>
-              <Label htmlFor="allowedUnits">IDs de unidades</Label>
-              <Input id="allowedUnits" value={values.allowedUnits} onChange={(e) => updateField('allowedUnits', e.target.value)} placeholder="Ex: unidade-a, unidade-b" />
-            </div>
-
-            <div>
-              <Label htmlFor="allowedStart">Horário inicial</Label>
-              <Input id="allowedStart" type="time" value={values.allowedStart} onChange={(e) => updateField('allowedStart', e.target.value)} />
-            </div>
-
-            <div>
-              <Label htmlFor="allowedEnd">Horário final</Label>
-              <Input id="allowedEnd" type="time" value={values.allowedEnd} onChange={(e) => updateField('allowedEnd', e.target.value)} />
-            </div>
-
             <div>
               <Label htmlFor="dailyCheckInLimit">Limite diário de check-ins</Label>
               <Input id="dailyCheckInLimit" type="number" min="0" value={values.dailyCheckInLimit} onChange={(e) => updateField('dailyCheckInLimit', e.target.value)} />

@@ -6,12 +6,15 @@
  * TODO: Staff, Roles, Policies, Integrations, Audit (próximas iterações)
  */
 
+import { getActiveAcademyId } from '@/lib/supabase/academyScope';
+
 // ============================================================================
 // TIPOS (compatíveis com settingsMock)
 // ============================================================================
 
 export type UnitStatus = 'active' | 'inactive' | 'maintenance';
 export type AcademyStatus = 'active' | 'inactive' | 'suspended';
+export type AccessScannerMode = 'entry_only' | 'separate_entry_exit' | 'single_entry_exit';
 
 export interface Address {
   street: string;
@@ -23,11 +26,26 @@ export interface Address {
   zipCode: string;
 }
 
+export interface DelinquencyPolicy {
+  blockAccess: boolean;
+  graceDays: number;
+}
+
+export const DELINQUENCY_POLICY_DEFAULTS: DelinquencyPolicy = {
+  blockAccess: false,
+  graceDays: 0,
+};
+
 export interface AcademyPreferences {
   language: string;
   timezone: string;
   currency: string;
   dateFormat: string;
+  accessControl?: {
+    scannerMode: AccessScannerMode;
+    blockSecondEntryWithoutExit: boolean;
+  };
+  delinquency?: DelinquencyPolicy;
 }
 
 export interface OperatingHour {
@@ -182,6 +200,19 @@ interface UnitRow {
 }
 
 function rowToAcademy(row: AcademyRow): Academy {
+  const defaultAccessControl: NonNullable<AcademyPreferences['accessControl']> = {
+    scannerMode: 'entry_only',
+    blockSecondEntryWithoutExit: false,
+  };
+
+  const defaultPreferences: AcademyPreferences = {
+    language: 'pt-BR',
+    timezone: 'America/Sao_Paulo',
+    currency: 'BRL',
+    dateFormat: 'DD/MM/YYYY',
+    accessControl: defaultAccessControl,
+  };
+
   return {
     id: row.id,
     tradeName: row.trade_name,
@@ -199,11 +230,27 @@ function rowToAcademy(row: AcademyRow): Academy {
       zipCode: '',
     },
     logoUrl: row.logo_url || undefined,
-    preferences: row.preferences || {
-      language: 'pt-BR',
-      timezone: 'America/Sao_Paulo',
-      currency: 'BRL',
-      dateFormat: 'DD/MM/YYYY',
+    preferences: {
+      ...defaultPreferences,
+      ...(row.preferences || {}),
+      accessControl: {
+        scannerMode:
+          row.preferences?.accessControl?.scannerMode
+          ?? defaultAccessControl.scannerMode,
+        blockSecondEntryWithoutExit:
+          row.preferences?.accessControl?.blockSecondEntryWithoutExit
+          ?? defaultAccessControl.blockSecondEntryWithoutExit,
+      },
+      delinquency: {
+        blockAccess:
+          (row.preferences as Record<string, unknown> | null)?.delinquency != null
+            ? Boolean((row.preferences as { delinquency?: DelinquencyPolicy }).delinquency?.blockAccess)
+            : DELINQUENCY_POLICY_DEFAULTS.blockAccess,
+        graceDays:
+          (row.preferences as Record<string, unknown> | null)?.delinquency != null
+            ? Number((row.preferences as { delinquency?: DelinquencyPolicy }).delinquency?.graceDays) || 0
+            : DELINQUENCY_POLICY_DEFAULTS.graceDays,
+      },
     },
     status: row.status || 'active',
     createdAt: new Date(row.created_at),
@@ -251,17 +298,12 @@ function rowToUnit(row: UnitRow): Unit {
  * Obtém a academia do usuário logado
  */
 export async function getAcademy(): Promise<Academy | null> {
-  // Buscar academy_id do usuário via my_profile
-  const { data: profile, error: profileError } = await fetchSupabase<{ academy_ids: string[] }[]>(
-    'my_profile?select=academy_ids'
-  );
+  const academyId = await getActiveAcademyId();
 
-  if (profileError || !profile?.[0]?.academy_ids?.[0]) {
-    console.error('Erro ao buscar academy_ids:', profileError);
+  if (!academyId) {
+    console.error('Erro ao buscar academy_id: usuário sem academia');
     return null;
   }
-
-  const academyId = profile[0].academy_ids[0];
 
   // Buscar dados da academy
   const { data: academies, error } = await fetchSupabase<AcademyRow[]>(
@@ -284,15 +326,11 @@ export async function updateAcademy(
   updatedBy: string
 ): Promise<{ success: boolean; academy?: Academy; error?: string }> {
   // Buscar ID da academy
-  const { data: profile } = await fetchSupabase<{ academy_ids: string[] }[]>(
-    'my_profile?select=academy_ids'
-  );
+  const academyId = await getActiveAcademyId();
 
-  if (!profile?.[0]?.academy_ids?.[0]) {
+  if (!academyId) {
     return { success: false, error: 'Academy não encontrada' };
   }
-
-  const academyId = profile[0].academy_ids[0];
 
   // Converter para formato do banco
   const dbUpdates: Partial<AcademyRow> = {
@@ -325,6 +363,60 @@ export async function updateAcademy(
   // Buscar academy atualizada
   const academy = await getAcademy();
   return { success: true, academy: academy || undefined };
+}
+
+// ============================================================================
+// DELINQUENCY POLICY (convenience wrappers)
+// ============================================================================
+
+/**
+ * Lê a política de inadimplência da academia do usuário logado.
+ * Retorna defaults seguros se nada estiver configurado.
+ */
+export async function getDelinquencyPolicy(): Promise<DelinquencyPolicy> {
+  const academy = await getAcademy();
+  if (!academy) return { ...DELINQUENCY_POLICY_DEFAULTS };
+  return academy.preferences.delinquency ?? { ...DELINQUENCY_POLICY_DEFAULTS };
+}
+
+/**
+ * Atualiza a política de inadimplência.
+ * Faz merge seguro: lê preferences atual → sobrescreve só delinquency → grava inteiro.
+ * Validação: graceDays deve ser >= 0 e inteiro.
+ */
+export async function updateDelinquencyPolicy(
+  policy: DelinquencyPolicy,
+  updatedBy: string
+): Promise<{ success: boolean; error?: string }> {
+  // Validação forte
+  if (typeof policy.blockAccess !== 'boolean') {
+    return { success: false, error: 'blockAccess deve ser verdadeiro ou falso' };
+  }
+  const graceDays = Math.floor(Number(policy.graceDays));
+  if (!Number.isFinite(graceDays) || graceDays < 0 || graceDays > 365) {
+    return { success: false, error: 'graceDays deve ser um número inteiro entre 0 e 365' };
+  }
+
+  // Ler academy atual para merge seguro de preferences
+  const academy = await getAcademy();
+  if (!academy) {
+    return { success: false, error: 'Academia não encontrada' };
+  }
+
+  const mergedPreferences: AcademyPreferences = {
+    ...academy.preferences,
+    delinquency: {
+      blockAccess: policy.blockAccess,
+      graceDays,
+    },
+  };
+
+  const result = await updateAcademy(
+    { preferences: mergedPreferences },
+    updatedBy
+  );
+
+  return { success: result.success, error: result.error };
 }
 
 // ============================================================================
@@ -371,15 +463,11 @@ export async function createUnit(
   createdBy: string
 ): Promise<{ success: boolean; unit?: Unit; error?: string }> {
   // Buscar academy_id
-  const { data: profile } = await fetchSupabase<{ academy_ids: string[] }[]>(
-    'my_profile?select=academy_ids'
-  );
+  const academyId = await getActiveAcademyId();
 
-  if (!profile?.[0]?.academy_ids?.[0]) {
+  if (!academyId) {
     return { success: false, error: 'Academy não encontrada' };
   }
-
-  const academyId = profile[0].academy_ids[0];
 
   const dbUnit = {
     academy_id: academyId,

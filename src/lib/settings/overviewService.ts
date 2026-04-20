@@ -1,5 +1,6 @@
 import { getAcademy, getUnits, type Academy, type Unit } from './settingsService';
 import { getStaffUsers } from './teamService';
+import { getAsaasConnectionState } from './integrationsService';
 
 export interface SettingsTeamSummary {
   total: number;
@@ -15,7 +16,7 @@ export interface SettingsIntegrationSummary {
   connected: number;
   errorCount: number;
   hasIssue: boolean;
-  source: 'placeholder';
+  source: 'real' | 'placeholder';
 }
 
 export interface SettingsOverview {
@@ -34,7 +35,7 @@ const EMPTY_TEAM_SUMMARY: SettingsTeamSummary = {
   errorMessage: null,
 };
 
-const PLACEHOLDER_INTEGRATIONS: SettingsIntegrationSummary = {
+const FALLBACK_INTEGRATIONS: SettingsIntegrationSummary = {
   total: 0,
   connected: 0,
   errorCount: 0,
@@ -56,21 +57,39 @@ function buildTeamSummary(
   };
 }
 
+async function buildIntegrationsSummary(): Promise<SettingsIntegrationSummary> {
+  try {
+    const state = await getAsaasConnectionState();
+    const isConnected = state.status === 'connected';
+    const hasError = state.status === 'error';
+    return {
+      total: state.account ? 1 : 0,
+      connected: isConnected ? 1 : 0,
+      errorCount: hasError ? 1 : 0,
+      hasIssue: hasError,
+      source: 'real',
+    };
+  } catch {
+    return FALLBACK_INTEGRATIONS;
+  }
+}
+
 export async function getSettingsOverview(): Promise<SettingsOverview> {
-  const [academy, units, staffResult] = await Promise.all([
+  const [academy, units, staffResult, integrations] = await Promise.all([
     getAcademy(),
     getUnits(),
     getStaffUsers().catch((error) => ({
       data: [],
       error: error instanceof Error ? error.message : 'Erro ao carregar equipe',
     })),
+    buildIntegrationsSummary(),
   ]);
 
   return {
     academy,
     units,
     team: buildTeamSummary(staffResult.data, staffResult.error),
-    integrations: PLACEHOLDER_INTEGRATIONS,
+    integrations,
   };
 }
 
@@ -79,6 +98,6 @@ export function getEmptySettingsOverview(): SettingsOverview {
     academy: null,
     units: [],
     team: EMPTY_TEAM_SUMMARY,
-    integrations: PLACEHOLDER_INTEGRATIONS,
+    integrations: FALLBACK_INTEGRATIONS,
   };
 }

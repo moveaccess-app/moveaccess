@@ -1135,6 +1135,3 @@ export function hasPermission(roleId: RoleId, action: ModuleAction): boolean {
 export function getBillingSettings(): Policies['billing'] {
   return getPolicies().billing;
 }
-
-// Exportar mocks para uso direto
-export { mockAcademy, mockUnits, mockRoles, mockStaffUsers, mockPolicies, mockIntegrations, mockAuditLogs };

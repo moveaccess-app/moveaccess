@@ -4,24 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, Button, Input, Label } from '@/components/ui';
 import {
-  OnboardingProgressBar,
-  StepIdentification,
-  StepPersonalData,
-  StepPlanSelection,
-  StepContract,
-  StepPayment,
-  StepActivation,
-} from '@/components/onboarding';
-import {
-  OnboardingSession,
-  getNextStep,
-  getPreviousStep,
-  getStepIndex,
-  ONBOARDING_STEPS,
-} from '@/lib/users/onboardingTypes';
-import {
-  completeSignup,
-  createPublicOnboardingSession,
+  claimSignup,
   startSignup,
   type InviteContext,
 } from '@/lib/invites';
@@ -43,18 +26,20 @@ function CheckCircleIcon({ className }: { className?: string }) {
   );
 }
 
-type PageState = 'loading' | 'invalid' | 'expired' | 'used' | 'welcome' | 'onboarding' | 'completed';
+type ClaimPageState = 'loading' | 'invalid' | 'expired' | 'cancelled' | 'used' | 'target_required' | 'welcome' | 'claimed_self' | 'claimed_other';
 
 export default function PublicOnboardingPage() {
   const router = useRouter();
   const params = useParams();
   const token = params.token as string;
 
-  const [pageState, setPageState] = useState<PageState>('loading');
+  const [pageState, setPageState] = useState<ClaimPageState>('loading');
   const [invite, setInvite] = useState<InviteContext | null>(null);
-  const [session, setSession] = useState<OnboardingSession | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
@@ -66,9 +51,20 @@ export default function PublicOnboardingPage() {
       const result = await startSignup(token);
       if (!mounted) return;
 
-      if (result.status === 'valid' && result.context) {
+      if (result.status === 'pending' && result.context) {
         setInvite(result.context);
         setPageState('welcome');
+        return;
+      }
+
+      if (result.status === 'claimed_self' && result.context) {
+        setInvite(result.context);
+        setPageState('claimed_self');
+        return;
+      }
+
+      if (result.status === 'claimed_other') {
+        setPageState('claimed_other');
         return;
       }
 
@@ -77,8 +73,18 @@ export default function PublicOnboardingPage() {
         return;
       }
 
-      if (result.status === 'used') {
+      if (result.status === 'completed') {
         setPageState('used');
+        return;
+      }
+
+      if (result.status === 'cancelled') {
+        setPageState('cancelled');
+        return;
+      }
+
+      if (result.status === 'target_required') {
+        setPageState('target_required');
         return;
       }
 
@@ -92,11 +98,26 @@ export default function PublicOnboardingPage() {
     };
   }, [token]);
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (!invite) return;
 
-    if (!password || password.length < 6) {
-      setPasswordError('A senha deve ter pelo menos 6 caracteres.');
+    if (!email || !email.includes('@')) {
+      setPasswordError('Confirme o e-mail vinculado ao convite.');
+      return;
+    }
+
+    if (!fullName.trim()) {
+      setPasswordError('Informe seu nome completo.');
+      return;
+    }
+
+    if (!password || password.length < 8) {
+      setPasswordError('A senha deve ter pelo menos 8 caracteres.');
+      return;
+    }
+
+    if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+      setPasswordError('A senha deve conter pelo menos uma letra e um número.');
       return;
     }
 
@@ -105,161 +126,83 @@ export default function PublicOnboardingPage() {
       return;
     }
 
-    const newSession = createPublicOnboardingSession(invite);
-    setSession(newSession);
-    setErrorMessage(null);
-    setPasswordError(null);
-    setPageState('onboarding');
-  };
-
-  const currentStepIndex = session ? getStepIndex(session.currentStep) : 0;
-  const currentStepInfo = session?.steps[currentStepIndex];
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const goToNextStep = (stepData: any) => {
-    if (!session) return;
-
-    const nextStep = getNextStep(session.currentStep);
-    const updatedCollectedData = { ...session.collectedData };
-
-    if (session.currentStep === 'identification') {
-      updatedCollectedData.identification = stepData;
-    }
-    if (session.currentStep === 'personal_data') {
-      updatedCollectedData.personalData = stepData;
-    }
-    if (session.currentStep === 'plan_selection') {
-      updatedCollectedData.planSelection = stepData;
-    }
-    if (session.currentStep === 'contract') {
-      updatedCollectedData.contract = stepData;
-    }
-    if (session.currentStep === 'payment') {
-      updatedCollectedData.payment = stepData;
-    }
-    if (session.currentStep === 'activation') {
-      updatedCollectedData.activation = stepData;
-    }
-
-    const targetStep = nextStep ?? session.currentStep;
-
-    const nextSession: OnboardingSession = {
-      ...session,
-      currentStep: targetStep,
-      status: nextStep ? 'in_progress' : 'completed',
-      collectedData: updatedCollectedData,
-      steps: session.steps.map((step, index) => {
-        if (index < getStepIndex(targetStep)) {
-          return { ...step, status: 'completed' as const };
-        }
-        if (index === getStepIndex(targetStep)) {
-          return { ...step, status: 'current' as const };
-        }
-        return { ...step, status: 'pending' as const };
-      }),
-      updatedAt: new Date().toISOString(),
-      completedAt: nextStep ? undefined : new Date().toISOString(),
-    };
-
-    setSession(nextSession);
-  };
-
-  const goToPreviousStep = () => {
-    if (!session) return;
-
-    const prevStep = getPreviousStep(session.currentStep);
-    if (!prevStep) return;
-
-    setSession((prev) => {
-      if (!prev) return prev;
-
-      return {
-        ...prev,
-        currentStep: prevStep,
-        steps: prev.steps.map((step, index) => {
-          if (index < getStepIndex(prevStep)) {
-            return { ...step, status: 'completed' as const };
-          }
-          if (index === getStepIndex(prevStep)) {
-            return { ...step, status: 'current' as const };
-          }
-          return { ...step, status: 'pending' as const };
-        }),
-      };
-    });
-  };
-
-  const handleComplete = async () => {
-    if (!session || !invite) return;
-
     try {
       setIsSubmitting(true);
       setErrorMessage(null);
+      setPasswordError(null);
 
-      const signupResult = await completeSignup(invite.token, session.collectedData, { password });
-      if (!signupResult.success) {
-        if (signupResult.errorCode === 'EMAIL_MISMATCH') {
+      const claimResult = await claimSignup(invite.token, {
+        email,
+        fullName,
+        phone,
+        password,
+      });
+
+      if (!claimResult.success) {
+        if (claimResult.errorCode === 'EMAIL_MISMATCH') {
           setErrorMessage('O e-mail informado não corresponde ao convite.');
           return;
         }
-        if (signupResult.errorCode === 'EMAIL_ALREADY_REGISTERED') {
-          setErrorMessage('Este e-mail já possui cadastro.');
+
+        if (claimResult.errorCode === 'EMAIL_ALREADY_REGISTERED') {
+          setErrorMessage('Este e-mail já possui cadastro. Faça login para continuar.');
           return;
         }
-        if (signupResult.errorCode === 'CPF_ALREADY_REGISTERED') {
-          setErrorMessage('Este CPF já possui cadastro.');
+
+        if (claimResult.errorCode === 'INVITE_ALREADY_CLAIMED' || claimResult.errorCode === 'TOKEN_CLAIMED') {
+          setPageState('claimed_other');
           return;
         }
-        if (signupResult.errorCode === 'TOKEN_USED') {
+
+        if (claimResult.errorCode === 'TOKEN_COMPLETED') {
           setPageState('used');
           return;
         }
-        if (signupResult.errorCode === 'TOKEN_EXPIRED') {
+
+        if (claimResult.errorCode === 'TOKEN_EXPIRED') {
           setPageState('expired');
           return;
         }
-        setErrorMessage('Não foi possível concluir o cadastro. Tente novamente.');
+
+        if (claimResult.errorCode === 'INVITE_TARGET_REQUIRED') {
+          setPageState('target_required');
+          return;
+        }
+
+        if (claimResult.errorCode === 'PASSWORD_TOO_SHORT') {
+          setPasswordError('A senha deve ter pelo menos 8 caracteres.');
+          return;
+        }
+
+        if (claimResult.errorCode === 'PASSWORD_TOO_WEAK') {
+          setPasswordError('A senha deve conter pelo menos uma letra e um número.');
+          return;
+        }
+
+        if (claimResult.errorCode === 'INVALID_EMAIL') {
+          setErrorMessage('O e-mail informado é inválido.');
+          return;
+        }
+
+        if (claimResult.errorCode === 'INVALID_NAME') {
+          setPasswordError('Informe seu nome completo (mínimo 2 caracteres).');
+          return;
+        }
+
+        setErrorMessage('Não foi possível iniciar o cadastro. Tente novamente.');
         return;
       }
 
-      const email = session.collectedData.identification?.email;
-      if (email) {
-        await loginStudent(email, password);
+      const loginResult = await loginStudent(email, password);
+      if (!loginResult.success) {
+        setErrorMessage('Convite claimado com sucesso, mas não foi possível entrar automaticamente. Faça login para continuar.');
+        router.push(`/aluno/login?next=${encodeURIComponent(`/cadastro/continuar?token=${token}`)}`);
+        return;
       }
 
-      setPageState('completed');
+      router.push(`/cadastro/continuar?token=${token}`);
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const renderCurrentStep = () => {
-    if (!session) return null;
-
-    switch (session.currentStep) {
-      case 'identification':
-        return <StepIdentification session={session} onNext={goToNextStep} />;
-      case 'personal_data':
-        return <StepPersonalData session={session} onNext={goToNextStep} onBack={goToPreviousStep} />;
-      case 'plan_selection':
-        return <StepPlanSelection session={session} onNext={goToNextStep} onBack={goToPreviousStep} />;
-      case 'contract':
-        return <StepContract session={session} onNext={goToNextStep} onBack={goToPreviousStep} />;
-      case 'payment':
-        return <StepPayment session={session} onNext={goToNextStep} onBack={goToPreviousStep} />;
-      case 'activation':
-        return (
-          <StepActivation
-            session={session}
-            onComplete={(data) => {
-              goToNextStep(data);
-              void handleComplete();
-            }}
-            onBack={goToPreviousStep}
-          />
-        );
-      default:
-        return null;
     }
   };
 
@@ -306,6 +249,38 @@ export default function PublicOnboardingPage() {
     );
   }
 
+  if (pageState === 'cancelled') {
+    return (
+      <div className="min-h-screen bg-[var(--background-secondary)] flex items-center justify-center p-6">
+        <Card className="max-w-md w-full p-8 text-center">
+          <div className="w-16 h-16 mx-auto bg-[var(--status-alert)]/10 rounded-full flex items-center justify-center mb-4">
+            <AlertIcon className="w-8 h-8 text-[var(--status-alert)]" />
+          </div>
+          <h1 className="text-xl font-semibold text-[var(--text-primary)] mb-2">Convite cancelado</h1>
+          <p className="text-[var(--text-secondary)] mb-6">
+            Este convite foi cancelado pela academia. Solicite um novo link para continuar.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
+  if (pageState === 'target_required') {
+    return (
+      <div className="min-h-screen bg-[var(--background-secondary)] flex items-center justify-center p-6">
+        <Card className="max-w-md w-full p-8 text-center">
+          <div className="w-16 h-16 mx-auto bg-[var(--status-alert)]/10 rounded-full flex items-center justify-center mb-4">
+            <AlertIcon className="w-8 h-8 text-[var(--status-alert)]" />
+          </div>
+          <h1 className="text-xl font-semibold text-[var(--text-primary)] mb-2">Convite precisa ser regenerado</h1>
+          <p className="text-[var(--text-secondary)] mb-6">
+            Este link foi criado sem e-mail alvo vinculado. Para proteger o cadastro, a academia precisa gerar um novo convite pessoal.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
   if (pageState === 'used') {
     return (
       <div className="min-h-screen bg-[var(--background-secondary)] flex items-center justify-center p-6">
@@ -313,10 +288,51 @@ export default function PublicOnboardingPage() {
           <div className="w-16 h-16 mx-auto bg-[var(--status-alert)]/10 rounded-full flex items-center justify-center mb-4">
             <AlertIcon className="w-8 h-8 text-[var(--status-alert)]" />
           </div>
-          <h1 className="text-xl font-semibold text-[var(--text-primary)] mb-2">Link já utilizado</h1>
+          <h1 className="text-xl font-semibold text-[var(--text-primary)] mb-2">Cadastro já concluído</h1>
           <p className="text-[var(--text-secondary)] mb-6">
-            Este convite já foi utilizado para criar um cadastro.
+            Este convite já concluiu o cadastro. A partir daqui o acesso segue pelo login do aluno.
           </p>
+          <Button onClick={() => router.push('/aluno/login')} className="w-full">
+            Ir para o login do aluno
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
+  if (pageState === 'claimed_other') {
+    return (
+      <div className="min-h-screen bg-[var(--background-secondary)] flex items-center justify-center p-6">
+        <Card className="max-w-md w-full p-8 text-center">
+          <div className="w-16 h-16 mx-auto bg-[var(--status-alert)]/10 rounded-full flex items-center justify-center mb-4">
+            <AlertIcon className="w-8 h-8 text-[var(--status-alert)]" />
+          </div>
+          <h1 className="text-xl font-semibold text-[var(--text-primary)] mb-2">Convite já iniciado</h1>
+          <p className="text-[var(--text-secondary)] mb-6">
+            Este convite já foi claimado. Se ele pertence a você, faça login para continuar o cadastro sem depender do link.
+          </p>
+          <Button onClick={() => router.push(`/aluno/login?next=${encodeURIComponent('/cadastro/continuar')}`)} className="w-full">
+            Fazer login para continuar
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
+  if (pageState === 'claimed_self' && invite) {
+    return (
+      <div className="min-h-screen bg-[var(--background-secondary)] flex items-center justify-center p-6">
+        <Card className="max-w-md w-full p-8 text-center">
+          <div className="w-16 h-16 mx-auto bg-[var(--status-positive)]/10 rounded-full flex items-center justify-center mb-4">
+            <CheckCircleIcon className="w-8 h-8 text-[var(--status-positive)]" />
+          </div>
+          <h1 className="text-xl font-semibold text-[var(--text-primary)] mb-2">Cadastro em andamento</h1>
+          <p className="text-[var(--text-secondary)] mb-6">
+            Este convite já está vinculado à sua conta. Continue pelo seu login real quando quiser.
+          </p>
+          <Button onClick={() => router.push(`/cadastro/continuar?token=${invite.token}`)} className="w-full">
+            Continuar cadastro
+          </Button>
         </Card>
       </div>
     );
@@ -327,8 +343,10 @@ export default function PublicOnboardingPage() {
       <div className="min-h-screen bg-[var(--background-secondary)] flex items-center justify-center p-6">
         <Card className="max-w-lg w-full p-8">
           <div className="text-center space-y-4 mb-8">
-            <h1 className="text-2xl font-bold text-[var(--text-primary)]">Bem-vindo(a)! 👋</h1>
-            <p className="text-[var(--text-secondary)]">Você foi convidado(a) para fazer parte da</p>
+            <h1 className="text-2xl font-bold text-[var(--text-primary)]">Convite pessoal</h1>
+            <p className="text-[var(--text-secondary)]">
+              {invite.recipientName ? `${invite.recipientName}, este convite foi separado para você.` : 'Seu convite foi separado para uma pessoa específica.'}
+            </p>
             <p className="text-lg font-semibold text-[var(--element-primary)]">
               {invite.unitName || invite.academyName || 'MoveAccess'}
             </p>
@@ -336,13 +354,51 @@ export default function PublicOnboardingPage() {
 
           <div className="space-y-4 mb-6">
             <div className="space-y-2">
+              <Label htmlFor="email">Confirme seu e-mail *</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder={invite.emailHint ? `Ex: ${invite.emailHint}` : 'voce@email.com'}
+              />
+              {invite.emailHint && (
+                <p className="text-xs text-[var(--text-tertiary)]">
+                  O convite está vinculado a um e-mail específico. Use o mesmo e-mail para claimar.
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="fullName">Nome completo *</Label>
+              <Input
+                id="fullName"
+                type="text"
+                value={fullName}
+                onChange={(event) => setFullName(event.target.value)}
+                placeholder="Seu nome completo"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="phone">Telefone (opcional)</Label>
+              <Input
+                id="phone"
+                type="tel"
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                placeholder="11999999999"
+              />
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="password">Crie sua senha *</Label>
               <Input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                placeholder="Mínimo 6 caracteres"
+                placeholder="Mínimo 8 caracteres, letras e números"
               />
             </div>
             <div className="space-y-2">
@@ -359,29 +415,25 @@ export default function PublicOnboardingPage() {
           </div>
 
           <div className="space-y-3 mb-8">
-            <p className="text-sm text-[var(--text-tertiary)] text-center">O cadastro leva apenas alguns minutos:</p>
+            <p className="text-sm text-[var(--text-tertiary)] text-center">Como funciona a partir daqui:</p>
             <ul className="space-y-2 text-sm text-[var(--text-secondary)]">
               <li className="flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-[var(--background-tertiary)] flex items-center justify-center text-xs font-medium">1</span>
-                Seus dados básicos
+                Você faz o claim inicial do convite
               </li>
               <li className="flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-[var(--background-tertiary)] flex items-center justify-center text-xs font-medium">2</span>
-                Escolha do plano ideal
+                O cadastro fica vinculado à sua conta real
               </li>
               <li className="flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-[var(--background-tertiary)] flex items-center justify-center text-xs font-medium">3</span>
-                Contrato e pagamento
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-[var(--background-tertiary)] flex items-center justify-center text-xs font-medium">4</span>
-                Acesso liberado!
+                Depois, você continua por login, sem depender do link
               </li>
             </ul>
           </div>
 
           <Button onClick={handleStart} className="w-full" size="lg" disabled={isSubmitting}>
-            Começar cadastro
+            Reservar convite e continuar
           </Button>
 
           <p className="text-xs text-[var(--text-tertiary)] text-center mt-4">
@@ -390,60 +442,6 @@ export default function PublicOnboardingPage() {
 
           {errorMessage && <p className="text-sm text-[var(--status-negative)] text-center mt-3">{errorMessage}</p>}
         </Card>
-      </div>
-    );
-  }
-
-  if (pageState === 'completed') {
-    return (
-      <div className="min-h-screen bg-[var(--background-secondary)] flex items-center justify-center p-6">
-        <Card className="max-w-md w-full p-8 text-center">
-          <div className="w-20 h-20 mx-auto bg-[var(--status-positive)]/10 rounded-full flex items-center justify-center mb-4">
-            <CheckCircleIcon className="w-12 h-12 text-[var(--status-positive)]" />
-          </div>
-          <h1 className="text-2xl font-bold text-[var(--text-primary)] mb-2">Cadastro concluído! 🎉</h1>
-          <p className="text-[var(--text-secondary)] mb-6">
-            Seu acesso à academia está liberado. Você já pode entrar no portal do aluno.
-          </p>
-
-          <Button onClick={() => router.push('/aluno')} className="w-full">
-            Entrar agora
-          </Button>
-        </Card>
-      </div>
-    );
-  }
-
-  if (pageState === 'onboarding' && session && invite) {
-    return (
-      <div className="min-h-screen bg-[var(--background-secondary)]">
-        <header className="sticky top-0 z-10 bg-[var(--background-primary)] border-b border-[var(--border-subtle)]">
-          <div className="max-w-3xl mx-auto px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-[var(--text-tertiary)]">{invite.unitName || invite.academyName || 'MoveAccess'}</p>
-                <p className="text-sm font-medium text-[var(--text-primary)]">
-                  {currentStepInfo?.title} • Etapa {currentStepIndex + 1} de {ONBOARDING_STEPS.length}
-                </p>
-              </div>
-
-              {invite.description && (
-                <span className="text-xs bg-[var(--status-positive)]/10 text-[var(--status-positive)] px-2 py-1 rounded-full">
-                  {invite.description}
-                </span>
-              )}
-            </div>
-
-            <div className="mt-4">
-              <OnboardingProgressBar current={currentStepIndex + 1} total={ONBOARDING_STEPS.length} showLabel={false} />
-            </div>
-          </div>
-        </header>
-
-        <main className="max-w-3xl mx-auto px-6 py-8">
-          <Card className="p-6 md:p-8">{renderCurrentStep()}</Card>
-          {errorMessage && <p className="mt-4 text-sm text-[var(--status-negative)]">{errorMessage}</p>}
-        </main>
       </div>
     );
   }

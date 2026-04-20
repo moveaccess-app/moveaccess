@@ -1,7 +1,7 @@
 # MoveAccess — Status das Páginas
 
 > Auditoria completa: quais páginas usam dados reais do banco vs. dados mockados.
-> Atualizado em: 05/03/2026
+> Atualizado em: 16/04/2026
 
 ---
 
@@ -22,8 +22,8 @@
 
 | Status | Quantidade |
 |--------|-----------|
-| ✅ Real | 5 |
-| 🟡 Parcial | 7 |
+| ✅ Real | 6 |
+| 🟡 Parcial | 6 |
 | 🔴 Mock (pode migrar logo) | 12 |
 | 🚫 Sem backend (requer modelagem) | 8 |
 | ⚙️ Sem banco | 2 |
@@ -61,11 +61,12 @@
 ---
 
 ### `/cadastro/[token]`
-**Status:** 🟡 Parcial (real em STG, validação final pendente)  
+**Status:** ✅ Real  
 **Rota:** `src/app/cadastro/[token]/page.tsx`  
-**Dados:** `src/lib/invites/inviteServiceSupabase.ts` via RPCs `get_invite_signup_context` + `finalize_invite_signup`  
-**Tabelas usadas:** `invite_links`, `profiles`, `student_profiles`, `academy_memberships`, `student_unit_assignments`, `auth.users`  
-**O que falta:** finalizar validação E2E do `finalize_invite_signup` no STG e depois promover para PRD mediante autorização explícita.  
+**Dados:** `src/lib/invites/inviteServiceSupabase.ts` via RPCs `get_invite_signup_context`, `claim_invite_signup`, `get_my_invite_signup_session`, `save_my_invite_signup_progress` e `complete_my_invite_signup`  
+**Tabelas usadas:** `invite_links`, `student_drafts`, `profiles`, `student_profiles`, `academy_memberships`, `student_unit_assignments`, `auth.users`  
+**Observação:** a primeira entrada pública acontece em `/cadastro/[token]`; a retomada segue em `/cadastro/continuar`, protegida por middleware server-side que redireciona sem sessão para `/aluno/login`.  
+**Estado atual:** fluxo endurecido validado em STG, sem dependência de `finalize_invite_signup` ou `is_invite_valid`; `validate_invite_token` agora espelha o mesmo entendimento de token cancelado, expirado, claimado ou concluído usado pelo backend principal.  
 **Prioridade:** 🔥 Alta — fluxo de cadastro de novos alunos
 
 ---

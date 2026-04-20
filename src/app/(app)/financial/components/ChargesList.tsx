@@ -1,187 +1,190 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import {
-  mockCharges,
-  CHARGE_STATUS_LABELS,
-  CHARGE_STATUS_VARIANT,
+  ArrowUpDown,
+  ChevronUp,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ClipboardList,
+} from 'lucide-react';
+import {
   formatCurrency,
   formatCurrencyCompact,
-  formatDate,
-  formatCompetence,
+  formatPaymentDate,
+  getAsaasStatusLabel,
+  getAsaasStatusVariant,
+  getChargeOriginLabel,
+  getChargeOriginVariant,
   getDaysOverdue,
   getDaysUntilDue,
-  ChargeStatus,
-  Charge,
-} from '@/mocks/financialMock';
+  getPaymentStatusLabel,
+  getPaymentStatusVariant,
+  type ChargeOrigin,
+  type Payment,
+  type PaymentStatus,
+} from '@/lib/payments/paymentService';
 
-type FilterStatus = 'all' | ChargeStatus;
-type SortField = 'dueDate' | 'value' | 'status';
+type FilterStatus = 'all' | PaymentStatus;
+type FilterOrigin = 'all' | ChargeOrigin;
+type SortField = 'dueDate' | 'amount' | 'status';
 
 const STATUS_FILTERS: { value: FilterStatus; label: string }[] = [
   { value: 'all', label: 'Todos' },
-  { value: 'pending', label: 'Pendente' },
-  { value: 'paid', label: 'Pago' },
-  { value: 'overdue', label: 'Em Atraso' },
-  { value: 'partial', label: 'Parcial' },
-  { value: 'waived', label: 'Isento' },
-  { value: 'cancelled', label: 'Cancelado' },
+  { value: 'pending', label: 'Pendentes' },
+  { value: 'paid', label: 'Pagos' },
+  { value: 'failed', label: 'Falhos' },
+  { value: 'refunded', label: 'Estornados' },
+];
+
+const ORIGIN_FILTERS: { value: FilterOrigin; label: string }[] = [
+  { value: 'all', label: 'Todas origens' },
+  { value: 'local', label: 'Manual' },
+  { value: 'asaas', label: 'Asaas' },
+  { value: 'recurring', label: 'Recorrente' },
 ];
 
 const ITEMS_PER_PAGE = 10;
 
-export function ChargesList({ showValues = true }: { showValues?: boolean }) {
+export function ChargesList({ payments, showValues = true }: { payments: Payment[]; showValues?: boolean }) {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<FilterStatus>('all');
+  const [originFilter, setOriginFilter] = useState<FilterOrigin>('all');
   const [sortBy, setSortBy] = useState<SortField>('dueDate');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [currentPage, setCurrentPage] = useState(1);
 
-  const filteredCharges = useMemo(() => {
-    let result = [...mockCharges];
+  const filteredPayments = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
 
-    // Filtro por status
-    if (statusFilter !== 'all') {
-      result = result.filter((charge) => charge.status === statusFilter);
-    }
+    const result = payments.filter((payment) => {
+      if (statusFilter !== 'all' && payment.status !== statusFilter) {
+        return false;
+      }
 
-    // Filtro por busca
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase();
-      result = result.filter(
-        (charge) =>
-          charge.userName.toLowerCase().includes(search) ||
-          charge.planName.toLowerCase().includes(search) ||
-          charge.id.toLowerCase().includes(search)
-      );
-    }
+      if (originFilter !== 'all' && payment.chargeOrigin !== originFilter) {
+        return false;
+      }
 
-    // Ordenação
-    result.sort((a, b) => {
+      if (!normalizedSearch) {
+        return true;
+      }
+
+      const haystack = [
+        payment.id,
+        payment.student?.fullName,
+        payment.student?.registrationId,
+        payment.student?.document,
+        payment.subscription?.planName,
+        payment.reference,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(normalizedSearch);
+    });
+
+    result.sort((left, right) => {
       let comparison = 0;
+
       switch (sortBy) {
-        case 'dueDate':
-          comparison = new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-          break;
-        case 'value':
-          comparison = a.finalValue - b.finalValue;
+        case 'amount':
+          comparison = left.amount - right.amount;
           break;
         case 'status':
-          comparison = a.status.localeCompare(b.status);
+          comparison = left.status.localeCompare(right.status);
+          break;
+        case 'dueDate':
+        default:
+          comparison = new Date(left.dueDate).getTime() - new Date(right.dueDate).getTime();
           break;
       }
+
       return sortOrder === 'asc' ? comparison : -comparison;
     });
 
     return result;
-  }, [searchTerm, statusFilter, sortBy, sortOrder]);
+  }, [payments, searchTerm, statusFilter, originFilter, sortBy, sortOrder]);
 
-  // Paginação
-  const totalPages = Math.ceil(filteredCharges.length / ITEMS_PER_PAGE);
-  const paginatedCharges = useMemo(() => {
+  const totalPages = Math.max(1, Math.ceil(filteredPayments.length / ITEMS_PER_PAGE));
+
+  const paginatedPayments = useMemo(() => {
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredCharges.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredCharges, currentPage]);
+    return filteredPayments.slice(start, start + ITEMS_PER_PAGE);
+  }, [currentPage, filteredPayments]);
 
-  // Reset página ao filtrar
-  const handleFilterChange = (newFilter: FilterStatus) => {
-    setStatusFilter(newFilter);
-    setCurrentPage(1);
-  };
-
-  const handleSearchChange = (value: string) => {
-    setSearchTerm(value);
-    setCurrentPage(1);
-  };
-
-  const handleChargeClick = (charge: Charge) => {
-    router.push(`/financial/cobranca/${charge.id}`);
-  };
+  const totalValue = filteredPayments.reduce((sum, payment) => sum + payment.amount, 0);
+  const { display: totalDisplay, full: totalFull } = formatCurrencyCompact(totalValue);
 
   const toggleSort = (field: SortField) => {
     if (sortBy === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(field);
-      setSortOrder('asc');
+      setSortOrder((previous) => (previous === 'asc' ? 'desc' : 'asc'));
+      return;
     }
+
+    setSortBy(field);
+    setSortOrder('asc');
   };
 
   const renderSortIcon = (field: SortField) => {
     if (sortBy !== field) {
-      return (
-        <svg className="w-3 h-3 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-        </svg>
-      );
+      return <ArrowUpDown className="w-3 h-3 opacity-30" />;
     }
-    return (
-      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        {sortOrder === 'asc' ? (
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-        ) : (
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        )}
-      </svg>
-    );
+
+    return sortOrder === 'asc'
+      ? <ChevronUp className="w-3 h-3" />
+      : <ChevronDown className="w-3 h-3" />;
   };
 
-  const renderDueDateInfo = (charge: Charge) => {
-    if (charge.status === 'paid' || charge.status === 'waived' || charge.status === 'cancelled') {
+  const renderDueDateInfo = (payment: Payment) => {
+    if (payment.status === 'paid' || payment.status === 'refunded') {
       return null;
     }
 
-    if (charge.status === 'overdue') {
-      const days = getDaysOverdue(charge.dueDate);
-      return (
-        <span className="text-xs text-[var(--status-negative)]">
-          {days}d atraso
-        </span>
-      );
+    const overdueDays = getDaysOverdue(payment.dueDate);
+    if (overdueDays > 0) {
+      return <span className="text-xs text-[var(--status-negative)]">{overdueDays}d atraso</span>;
     }
 
-    const days = getDaysUntilDue(charge.dueDate);
-    if (days <= 7 && days >= 0) {
-      return (
-        <span className="text-xs text-[var(--status-alert)]">
-          {days}d
-        </span>
-      );
+    const daysUntilDue = getDaysUntilDue(payment.dueDate);
+    if (daysUntilDue <= 7) {
+      return <span className="text-xs text-[var(--status-alert)]">{daysUntilDue}d</span>;
     }
 
     return null;
   };
 
-  // Totais
-  const totalValue = filteredCharges.reduce((sum, c) => sum + c.finalValue, 0);
-  const { display: totalDisplay, full: totalFull } = formatCurrencyCompact(totalValue);
-
   return (
     <div className="space-y-4">
-      {/* Filtros e busca */}
       <Card className="p-4">
         <div className="flex flex-col gap-4">
-          {/* Linha 1: Busca + Dropdown de status (mobile friendly) */}
           <div className="flex flex-col sm:flex-row gap-3">
             <div className="flex-1">
               <Input
-                placeholder="Buscar por aluno, plano ou código..."
+                placeholder="Buscar por aluno, plano, documento ou código..."
                 value={searchTerm}
-                onChange={(e) => handleSearchChange(e.target.value)}
+                onChange={(event) => {
+                  setSearchTerm(event.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full"
               />
             </div>
-            {/* Select dropdown para mobile, botões para desktop */}
             <div className="sm:hidden">
               <select
                 value={statusFilter}
-                onChange={(e) => handleFilterChange(e.target.value as FilterStatus)}
+                onChange={(event) => {
+                  setStatusFilter(event.target.value as FilterStatus);
+                  setCurrentPage(1);
+                }}
                 className="w-full px-3 py-2 border border-[var(--divider-primary)] rounded-lg bg-[var(--background-primary)] text-[var(--element-primary)] text-sm"
               >
                 {STATUS_FILTERS.map((filter) => (
@@ -191,16 +194,48 @@ export function ChargesList({ showValues = true }: { showValues?: boolean }) {
                 ))}
               </select>
             </div>
+            <div className="w-full">
+              <select
+                value={originFilter}
+                onChange={(event) => {
+                  setOriginFilter(event.target.value as FilterOrigin);
+                  setCurrentPage(1);
+                }}
+                className="w-full px-3 py-2 border border-[var(--divider-primary)] rounded-lg bg-[var(--background-primary)] text-[var(--element-primary)] text-sm"
+              >
+                {ORIGIN_FILTERS.map((filter) => (
+                  <option key={filter.value} value={filter.value}>
+                    {filter.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-          
-          {/* Linha 2: Botões de filtro (apenas desktop) */}
+
           <div className="hidden sm:flex gap-2 flex-wrap">
             {STATUS_FILTERS.map((filter) => (
               <Button
                 key={filter.value}
                 variant={statusFilter === filter.value ? 'default' : 'secondary'}
                 size="sm"
-                onClick={() => handleFilterChange(filter.value)}
+                onClick={() => {
+                  setStatusFilter(filter.value);
+                  setCurrentPage(1);
+                }}
+              >
+                {filter.label}
+              </Button>
+            ))}
+            <span className="w-px bg-[var(--divider-primary)] mx-1" />
+            {ORIGIN_FILTERS.map((filter) => (
+              <Button
+                key={filter.value}
+                variant={originFilter === filter.value ? 'default' : 'secondary'}
+                size="sm"
+                onClick={() => {
+                  setOriginFilter(filter.value);
+                  setCurrentPage(1);
+                }}
               >
                 {filter.label}
               </Button>
@@ -209,90 +244,67 @@ export function ChargesList({ showValues = true }: { showValues?: boolean }) {
         </div>
       </Card>
 
-      {/* Tabela de cobranças - com scroll horizontal */}
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[700px]">
+          <table className="w-full min-w-[720px]">
             <thead className="bg-[var(--background-tertiary)]">
               <tr>
-                <th className="text-left p-3 font-medium text-[var(--element-secondary)] text-sm sticky left-0 bg-[var(--background-tertiary)] z-10">
-                  Aluno
+                <th className="text-left p-3 font-medium text-[var(--element-secondary)] text-sm sticky left-0 bg-[var(--background-tertiary)] z-10">Aluno</th>
+                <th className="text-left p-3 font-medium text-[var(--element-secondary)] text-sm">Plano</th>
+                <th className="text-left p-3 font-medium text-[var(--element-secondary)] text-sm">Referência</th>
+                <th className="text-right p-3 font-medium text-[var(--element-secondary)] text-sm cursor-pointer hover:text-[var(--element-primary)] select-none" onClick={() => toggleSort('amount')}>
+                  <span className="inline-flex items-center gap-1">Valor {renderSortIcon('amount')}</span>
                 </th>
-                <th className="text-left p-3 font-medium text-[var(--element-secondary)] text-sm">
-                  Plano
+                <th className="text-left p-3 font-medium text-[var(--element-secondary)] text-sm cursor-pointer hover:text-[var(--element-primary)] select-none" onClick={() => toggleSort('dueDate')}>
+                  <span className="inline-flex items-center gap-1">Vencimento {renderSortIcon('dueDate')}</span>
                 </th>
-                <th className="text-left p-3 font-medium text-[var(--element-secondary)] text-sm">
-                  Competência
-                </th>
-                <th
-                  className="text-right p-3 font-medium text-[var(--element-secondary)] text-sm cursor-pointer hover:text-[var(--element-primary)] select-none"
-                  onClick={() => toggleSort('value')}
-                >
-                  <span className="inline-flex items-center gap-1">
-                    Valor {renderSortIcon('value')}
-                  </span>
-                </th>
-                <th
-                  className="text-left p-3 font-medium text-[var(--element-secondary)] text-sm cursor-pointer hover:text-[var(--element-primary)] select-none"
-                  onClick={() => toggleSort('dueDate')}
-                >
-                  <span className="inline-flex items-center gap-1">
-                    Vencimento {renderSortIcon('dueDate')}
-                  </span>
-                </th>
-                <th
-                  className="text-left p-3 font-medium text-[var(--element-secondary)] text-sm cursor-pointer hover:text-[var(--element-primary)] select-none"
-                  onClick={() => toggleSort('status')}
-                >
-                  <span className="inline-flex items-center gap-1">
-                    Status {renderSortIcon('status')}
-                  </span>
+                <th className="text-left p-3 font-medium text-[var(--element-secondary)] text-sm cursor-pointer hover:text-[var(--element-primary)] select-none" onClick={() => toggleSort('status')}>
+                  <span className="inline-flex items-center gap-1">Status {renderSortIcon('status')}</span>
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--divider-primary)]">
-              {paginatedCharges.map((charge) => (
+              {paginatedPayments.map((payment) => (
                 <tr
-                  key={charge.id}
-                  onClick={() => handleChargeClick(charge)}
+                  key={payment.id}
+                  onClick={() => router.push(`/financial/cobranca/${payment.id}`)}
                   className="hover:bg-[var(--background-tertiary)] cursor-pointer transition-colors"
                 >
                   <td className="p-3 sticky left-0 bg-[var(--background-primary)] z-10">
-                    <div className="font-medium text-[var(--element-primary)] text-sm truncate max-w-[180px]">
-                      {charge.userName}
+                    <div className="font-medium text-[var(--element-primary)] text-sm truncate max-w-[220px]">
+                      {payment.student?.fullName || 'Aluno não encontrado'}
                     </div>
-                    <div className="text-xs text-[var(--element-disabled)]">
-                      {charge.id}
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-xs text-[var(--element-disabled)]">{payment.student?.registrationId || payment.id}</span>
+                      <Badge variant={getChargeOriginVariant(payment.chargeOrigin)} className="text-[10px] px-1.5 py-0 leading-4">
+                        {getChargeOriginLabel(payment.chargeOrigin)}
+                      </Badge>
                     </div>
                   </td>
                   <td className="p-3 text-[var(--element-secondary)] text-sm">
-                    <span className="truncate max-w-[120px] block">{charge.planName}</span>
+                    <span className="truncate max-w-[160px] block">{payment.subscription?.planName || 'Plano'}</span>
                   </td>
-                  <td className="p-3 text-[var(--element-secondary)] text-sm">
-                    {formatCompetence(charge.competence)}
-                  </td>
+                  <td className="p-3 text-[var(--element-secondary)] text-sm">{payment.reference || '—'}</td>
                   <td className="p-3 text-right">
-                    <div className="font-medium text-[var(--element-primary)] text-sm" title={showValues ? formatCurrency(charge.finalValue) : undefined}>
-                      {showValues ? formatCurrencyCompact(charge.finalValue).display : '•••••'}
+                    <div className="font-medium text-[var(--element-primary)] text-sm" title={showValues ? formatCurrency(payment.amount, payment.currency) : undefined}>
+                      {showValues ? formatCurrencyCompact(payment.amount, payment.currency).display : '•••••'}
                     </div>
-                    {charge.baseValue !== charge.finalValue && showValues && (
-                      <div className="text-xs text-[var(--element-disabled)] line-through">
-                        {formatCurrencyCompact(charge.baseValue).display}
-                      </div>
-                    )}
                   </td>
                   <td className="p-3">
                     <div className="flex items-center gap-2">
-                      <span className="text-[var(--element-primary)] text-sm">
-                        {formatDate(charge.dueDate)}
-                      </span>
-                      {renderDueDateInfo(charge)}
+                      <span className="text-[var(--element-primary)] text-sm">{formatPaymentDate(payment.dueDate)}</span>
+                      {renderDueDateInfo(payment)}
                     </div>
                   </td>
                   <td className="p-3">
-                    <Badge variant={CHARGE_STATUS_VARIANT[charge.status]}>
-                      {CHARGE_STATUS_LABELS[charge.status]}
-                    </Badge>
+                    <div className="flex flex-col gap-1 items-start">
+                      <Badge variant={getPaymentStatusVariant(payment.status)}>{getPaymentStatusLabel(payment.status)}</Badge>
+                      {payment.isAsaasManaged && payment.asaasStatus && (
+                        <Badge variant={getAsaasStatusVariant(payment.asaasStatus)} className="text-[10px]">
+                          {getAsaasStatusLabel(payment.asaasStatus)}
+                        </Badge>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -300,73 +312,35 @@ export function ChargesList({ showValues = true }: { showValues?: boolean }) {
           </table>
         </div>
 
-        {/* Estado vazio */}
-        {filteredCharges.length === 0 && (
+        {filteredPayments.length === 0 && (
           <div className="p-8 text-center">
             <div className="p-4 rounded-full bg-[var(--background-tertiary)] w-fit mx-auto mb-4">
-              <svg className="w-8 h-8 text-[var(--element-disabled)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
+              <ClipboardList className="w-8 h-8 text-[var(--element-disabled)]" />
             </div>
-            <div className="text-[var(--element-primary)] font-medium">
-              Nenhuma cobrança encontrada
-            </div>
+            <div className="text-[var(--element-primary)] font-medium">Nenhuma cobrança encontrada</div>
             <div className="text-[var(--element-disabled)] text-sm mt-1">
-              {searchTerm || statusFilter !== 'all' 
-                ? 'Tente ajustar os filtros de busca'
-                : 'As cobranças aparecerão aqui quando criadas'}
+              {searchTerm || statusFilter !== 'all' ? 'Tente ajustar os filtros de busca.' : 'As cobranças aparecerão aqui quando criadas.'}
             </div>
-            {(searchTerm || statusFilter !== 'all') && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-3"
-                onClick={() => {
-                  setSearchTerm('');
-                  setStatusFilter('all');
-                }}
-              >
-                Limpar filtros
-              </Button>
-            )}
           </div>
         )}
       </Card>
 
-      {/* Rodapé: Resumo + Paginação */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 text-sm">
         <div className="text-[var(--element-secondary)]">
-          {filteredCharges.length} cobrança(s) • Total:{' '}
+          {filteredPayments.length} cobrança(s) • Total:{' '}
           <strong className="text-[var(--element-primary)]" title={showValues ? totalFull : undefined}>
             {showValues ? totalDisplay : '•••••'}
           </strong>
         </div>
 
-        {/* Paginação */}
         {totalPages > 1 && (
           <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-              </svg>
+            <Button variant="ghost" size="sm" onClick={() => setCurrentPage((page) => Math.max(1, page - 1))} disabled={currentPage === 1}>
+              <ChevronLeft className="w-4 h-4" />
             </Button>
-            <span className="px-3 py-1 text-[var(--element-secondary)]">
-              {currentPage} / {totalPages}
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
+            <span className="px-3 py-1 text-[var(--element-secondary)]">{currentPage} / {totalPages}</span>
+            <Button variant="ghost" size="sm" onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))} disabled={currentPage === totalPages}>
+              <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
         )}

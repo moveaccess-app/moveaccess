@@ -34,6 +34,16 @@ interface FinalizeDraftResult {
   user_id?: string;
   already_published?: boolean;
   error?: string;
+  activation?: {
+    activated: boolean;
+    already_existed?: boolean;
+    subscription_id?: string;
+    payment_id?: string;
+    plan_name?: string;
+    plan_price?: number;
+    billing_cycle?: string;
+    reason?: string;
+  };
 }
 
 const API_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -274,4 +284,54 @@ export async function finalizeOnboardingDraft(draftId: string): Promise<Finalize
   }
 
   return data;
+}
+
+// ─── External billing activation ─────────────────────────────────
+
+export type ExternalBillingStatus =
+  | 'completed_with_billing'
+  | 'completed_local_only'
+  | 'pending_external_billing'
+  | 'failed_external_billing'
+  | 'already_exists';
+
+export interface ExternalBillingResult {
+  status: ExternalBillingStatus;
+  billingPath: 'subscription' | 'charge' | null;
+  reason?: string;
+  asaasSubscriptionId?: string;
+  asaasChargeId?: string;
+  asaasPaymentId?: string;
+  invoiceUrl?: string | null;
+  bankSlipUrl?: string | null;
+  environment?: string;
+}
+
+export async function activateExternalBilling(
+  subscriptionId: string,
+  paymentId: string,
+): Promise<ExternalBillingResult> {
+  try {
+    const response = await fetch('/api/billing/activate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscriptionId, paymentId }),
+    });
+
+    if (!response.ok) {
+      return {
+        status: 'failed_external_billing',
+        billingPath: null,
+        reason: `API_ERROR_${response.status}`,
+      };
+    }
+
+    return await response.json();
+  } catch {
+    return {
+      status: 'failed_external_billing',
+      billingPath: null,
+      reason: 'NETWORK_ERROR',
+    };
+  }
 }

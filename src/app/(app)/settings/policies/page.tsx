@@ -1,11 +1,18 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/common/Header';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { getPolicies, updatePolicies, type Policies } from '@/mocks/settingsMock';
+import { Badge } from '@/components/ui/Badge';
+import { Skeleton } from '@/components/ui/Skeleton';
+import {
+  getDelinquencyPolicy,
+  updateDelinquencyPolicy,
+  type DelinquencyPolicy,
+  DELINQUENCY_POLICY_DEFAULTS,
+} from '@/lib/settings';
 
 // Toggle component (fora do render)
 function Toggle({
@@ -70,34 +77,88 @@ function NumberSelect({
   );
 }
 
+// Section placeholder for features not yet implemented
+function PlannedSection({
+  title,
+  description,
+  items,
+}: {
+  title: string;
+  description: string;
+  items: string[];
+}) {
+  return (
+    <Card className="overflow-hidden opacity-75">
+      <div className="p-4 bg-[var(--background-tertiary)] border-b border-[var(--divider-primary)]">
+        <div className="flex items-center gap-2">
+          <h2 className="font-semibold text-[var(--element-primary)]">{title}</h2>
+          <Badge variant="secondary">Em breve</Badge>
+        </div>
+        <p className="text-xs text-[var(--element-secondary)] mt-1">{description}</p>
+      </div>
+      <div className="p-4">
+        <ul className="space-y-2">
+          {items.map((item) => (
+            <li key={item} className="flex items-center gap-2 text-sm text-[var(--element-disabled)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--element-disabled)] flex-shrink-0" />
+              {item}
+            </li>
+          ))}
+        </ul>
+        <p className="text-xs text-[var(--element-disabled)] mt-4">
+          Esta configuração estará disponível em uma próxima atualização.
+        </p>
+      </div>
+    </Card>
+  );
+}
+
 export default function PoliciesPage() {
-  const originalPolicies = useMemo(() => getPolicies(), []);
-  const [formData, setFormData] = useState<Policies>(originalPolicies);
-  const [isSaving, setIsSaving] = useState(false);
-  const [hasChanges, setHasChanges] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
+  // ── Delinquency policy (real data) ───────────────────────────
+  const [delinquencyPolicy, setDelinquencyPolicy] = useState<DelinquencyPolicy>(DELINQUENCY_POLICY_DEFAULTS);
+  const [delinquencyOriginal, setDelinquencyOriginal] = useState<DelinquencyPolicy>(DELINQUENCY_POLICY_DEFAULTS);
+  const [delinquencyLoading, setDelinquencyLoading] = useState(true);
+  const [delinquencySaving, setDelinquencySaving] = useState(false);
+  const [delinquencyError, setDelinquencyError] = useState('');
+  const [delinquencySuccess, setDelinquencySuccess] = useState('');
 
-  const handleChange = (section: keyof Policies, field: string, value: boolean | number) => {
-    setHasChanges(true);
-    setSuccessMessage('');
-    setFormData((prev) => ({
-      ...prev,
-      [section]: {
-        ...(prev[section] as Record<string, unknown>),
-        [field]: value,
-      },
-    }));
-  };
+  const delinquencyHasChanges =
+    delinquencyPolicy.blockAccess !== delinquencyOriginal.blockAccess ||
+    delinquencyPolicy.graceDays !== delinquencyOriginal.graceDays;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSaving(true);
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    updatePolicies(formData, 'staff_001');
-    setIsSaving(false);
-    setHasChanges(false);
-    setSuccessMessage('Configurações salvas!');
-    setTimeout(() => setSuccessMessage(''), 3000);
+  const loadDelinquency = useCallback(async () => {
+    setDelinquencyLoading(true);
+    setDelinquencyError('');
+    try {
+      const policy = await getDelinquencyPolicy();
+      setDelinquencyPolicy(policy);
+      setDelinquencyOriginal(policy);
+    } catch {
+      setDelinquencyError('Não foi possível carregar a política de inadimplência.');
+    } finally {
+      setDelinquencyLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { void loadDelinquency(); }, [loadDelinquency]);
+
+  const handleSaveDelinquency = async () => {
+    setDelinquencySaving(true);
+    setDelinquencyError('');
+    setDelinquencySuccess('');
+
+    const result = await updateDelinquencyPolicy(delinquencyPolicy, 'current_user');
+
+    setDelinquencySaving(false);
+
+    if (!result.success) {
+      setDelinquencyError(result.error || 'Erro ao salvar.');
+      return;
+    }
+
+    setDelinquencyOriginal({ ...delinquencyPolicy });
+    setDelinquencySuccess('Política de inadimplência salva!');
+    setTimeout(() => setDelinquencySuccess(''), 3000);
   };
 
   return (
@@ -105,7 +166,7 @@ export default function PoliciesPage() {
       <Header title="Regras de Negócio" />
 
       <div className="flex-1 overflow-auto">
-        <form onSubmit={handleSubmit} className="p-4 lg:p-6 max-w-3xl mx-auto space-y-6">
+        <div className="p-4 lg:p-6 max-w-3xl mx-auto space-y-6">
           {/* Breadcrumb */}
           <div className="flex items-center gap-2 text-sm text-[var(--element-secondary)]">
             <Link href="/settings" className="hover:text-[var(--status-info)]">Configurações</Link>
@@ -113,123 +174,133 @@ export default function PoliciesPage() {
             <span className="text-[var(--element-primary)]">Regras</span>
           </div>
 
-          {/* Feedback */}
-          {successMessage && (
-            <div className="p-3 rounded-lg bg-[var(--status-positive-background)] text-[var(--status-positive)] text-sm">
-              {successMessage}
-            </div>
-          )}
-
-          {/* Descrição */}
           <p className="text-sm text-[var(--element-secondary)]">
             Configure como sua academia lida com cobranças, inadimplência e acesso.
           </p>
 
-          {/* Inadimplência */}
+          {/* ── Inadimplência (REAL DATA) ─────────────────────────── */}
           <Card className="overflow-hidden">
             <div className="p-4 bg-[var(--background-tertiary)] border-b border-[var(--divider-primary)]">
-              <h2 className="font-semibold text-[var(--element-primary)]">Inadimplência</h2>
-              <p className="text-xs text-[var(--element-secondary)]">O que acontece quando um aluno atrasa o pagamento</p>
+              <div className="flex items-center gap-2">
+                <h2 className="font-semibold text-[var(--element-primary)]">Inadimplência</h2>
+                <Badge variant="success">Ativo</Badge>
+              </div>
+              <p className="text-xs text-[var(--element-secondary)] mt-1">O que acontece quando um aluno atrasa o pagamento</p>
             </div>
             <div className="p-4">
-              <Toggle
-                checked={formData.delinquency.blockAccess}
-                onChange={(v) => handleChange('delinquency', 'blockAccess', v)}
-                label="Bloquear acesso quando inadimplente"
-                hint="O aluno não conseguirá fazer check-in se tiver pendências"
-              />
-              <NumberSelect
-                label="Dias de tolerância"
-                value={formData.delinquency.toleranceDays}
-                onChange={(v) => handleChange('delinquency', 'toleranceDays', v)}
-                options={[
-                  { value: 0, label: 'Bloquear no vencimento' },
-                  { value: 3, label: '3 dias' },
-                  { value: 5, label: '5 dias' },
-                  { value: 7, label: '1 semana' },
-                  { value: 15, label: '15 dias' },
-                ]}
-                hint="Tempo que o aluno ainda pode acessar após o vencimento"
-              />
+              {delinquencyLoading ? (
+                <div className="py-3 space-y-3">
+                  <Skeleton height="h-4" width="w-48" />
+                  <Skeleton height="h-4" width="w-64" />
+                  <Skeleton height="h-4" width="w-32" />
+                </div>
+              ) : delinquencyError && !delinquencyPolicy.blockAccess && delinquencyPolicy.graceDays === 0 ? (
+                <div className="py-3">
+                  <p className="text-sm text-[var(--status-negative)]">{delinquencyError}</p>
+                  <Button variant="outline" className="mt-2" onClick={() => void loadDelinquency()}>Tentar novamente</Button>
+                </div>
+              ) : (
+                <>
+                  {delinquencyError && (
+                    <p className="text-sm text-[var(--status-negative)] mb-3">{delinquencyError}</p>
+                  )}
+
+                  <Toggle
+                    checked={delinquencyPolicy.blockAccess}
+                    onChange={(v) => {
+                      setDelinquencySuccess('');
+                      setDelinquencyError('');
+                      setDelinquencyPolicy((prev) => ({ ...prev, blockAccess: v }));
+                    }}
+                    label="Bloquear acesso quando inadimplente"
+                    hint="O aluno não conseguirá fazer check-in se tiver cobranças vencidas"
+                  />
+                  <NumberSelect
+                    label="Dias de tolerância"
+                    value={delinquencyPolicy.graceDays}
+                    onChange={(v) => {
+                      setDelinquencySuccess('');
+                      setDelinquencyError('');
+                      setDelinquencyPolicy((prev) => ({ ...prev, graceDays: v }));
+                    }}
+                    options={[
+                      { value: 0, label: 'Bloquear no vencimento' },
+                      { value: 3, label: '3 dias' },
+                      { value: 5, label: '5 dias' },
+                      { value: 7, label: '1 semana' },
+                      { value: 10, label: '10 dias' },
+                      { value: 15, label: '15 dias' },
+                      { value: 30, label: '30 dias' },
+                    ]}
+                    hint="Tempo que o aluno ainda pode acessar após o vencimento"
+                  />
+
+                  {delinquencyPolicy.blockAccess && (
+                    <div className="mt-3 p-3 rounded-lg bg-[var(--status-alert-background)] text-[var(--status-alert)] text-xs">
+                      Alunos com cobranças vencidas há mais de {delinquencyPolicy.graceDays} dia(s) terão o check-in bloqueado automaticamente.
+                    </div>
+                  )}
+
+                  {!delinquencyPolicy.blockAccess && (
+                    <div className="mt-3 p-3 rounded-lg bg-[var(--background-tertiary)] text-[var(--element-secondary)] text-xs">
+                      Inadimplência será registrada, mas o acesso não será bloqueado. Você pode ativar o bloqueio a qualquer momento.
+                    </div>
+                  )}
+
+                  {delinquencySuccess && (
+                    <div className="mt-3 p-3 rounded-lg bg-[var(--status-positive-background)] text-[var(--status-positive)] text-sm">
+                      {delinquencySuccess}
+                    </div>
+                  )}
+
+                  {delinquencyHasChanges && (
+                    <div className="mt-4 flex justify-end">
+                      <Button
+                        onClick={() => void handleSaveDelinquency()}
+                        disabled={delinquencySaving}
+                      >
+                        {delinquencySaving ? 'Salvando...' : 'Salvar Inadimplência'}
+                      </Button>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </Card>
 
-          {/* Cobrança */}
-          <Card className="overflow-hidden">
-            <div className="p-4 bg-[var(--background-tertiary)] border-b border-[var(--divider-primary)]">
-              <h2 className="font-semibold text-[var(--element-primary)]">Cobrança</h2>
-              <p className="text-xs text-[var(--element-secondary)]">Configurações padrão para novas mensalidades</p>
-            </div>
-            <div className="p-4">
-              <NumberSelect
-                label="Dia de vencimento padrão"
-                value={formData.billing.defaultDueDay}
-                onChange={(v) => handleChange('billing', 'defaultDueDay', v)}
-                options={[5, 10, 15, 20, 25].map((d) => ({ value: d, label: `Dia ${d}` }))}
-                hint="Novos alunos terão este vencimento por padrão"
-              />
-            </div>
-          </Card>
+          {/* ── Cobrança (em breve) ───────────────────────────────── */}
+          <PlannedSection
+            title="Cobrança"
+            description="Configurações padrão para novas mensalidades"
+            items={[
+              'Dia de vencimento padrão',
+              'Multa e juros automáticos',
+              'Formato de cobrança preferencial',
+            ]}
+          />
 
-          {/* Reativação */}
-          <Card className="overflow-hidden">
-            <div className="p-4 bg-[var(--background-tertiary)] border-b border-[var(--divider-primary)]">
-              <h2 className="font-semibold text-[var(--element-primary)]">Reativação</h2>
-              <p className="text-xs text-[var(--element-secondary)]">Retorno de alunos que cancelaram</p>
-            </div>
-            <div className="p-4">
-              <Toggle
-                checked={formData.reactivation.allowAfterCancellation}
-                onChange={(v) => handleChange('reactivation', 'allowAfterCancellation', v)}
-                label="Permitir reativação após cancelamento"
-                hint="Alunos podem retornar após terem cancelado"
-              />
-              <Toggle
-                checked={formData.reactivation.requireNewContract}
-                onChange={(v) => handleChange('reactivation', 'requireNewContract', v)}
-                label="Exigir nova assinatura de contrato"
-                hint="Aluno precisa assinar um novo contrato ao retornar"
-              />
-              <Toggle
-                checked={formData.reactivation.clearPendingDebts}
-                onChange={(v) => handleChange('reactivation', 'clearPendingDebts', v)}
-                label="Exigir quitação de débitos"
-                hint="Pendências devem ser pagas antes de reativar"
-              />
-            </div>
-          </Card>
+          {/* ── Reativação (em breve) ─────────────────────────────── */}
+          <PlannedSection
+            title="Reativação"
+            description="Retorno de alunos que cancelaram"
+            items={[
+              'Permitir reativação após cancelamento',
+              'Exigir nova assinatura de contrato',
+              'Exigir quitação de débitos',
+            ]}
+          />
 
-          {/* Check-in */}
-          <Card className="overflow-hidden">
-            <div className="p-4 bg-[var(--background-tertiary)] border-b border-[var(--divider-primary)]">
-              <h2 className="font-semibold text-[var(--element-primary)]">Check-in</h2>
-              <p className="text-xs text-[var(--element-secondary)]">Controle de acesso às unidades</p>
-            </div>
-            <div className="p-4">
-              <Toggle
-                checked={formData.checkIn.allowMultipleCheckInsDay}
-                onChange={(v) => handleChange('checkIn', 'allowMultipleCheckInsDay', v)}
-                label="Permitir múltiplos acessos por dia"
-                hint="Aluno pode fazer check-in mais de uma vez no mesmo dia"
-              />
-              <Toggle
-                checked={formData.checkIn.logAllAttempts}
-                onChange={(v) => handleChange('checkIn', 'logAllAttempts', v)}
-                label="Registrar tentativas bloqueadas"
-                hint="Salvar histórico quando alguém tenta acessar sem permissão"
-              />
-            </div>
-          </Card>
-
-          {/* Botão salvar */}
-          {hasChanges && (
-            <div className="sticky bottom-4 flex justify-end">
-              <Button type="submit" disabled={isSaving}>
-                {isSaving ? 'Salvando...' : 'Salvar Alterações'}
-              </Button>
-            </div>
-          )}
-        </form>
+          {/* ── Check-in (em breve) ───────────────────────────────── */}
+          <PlannedSection
+            title="Check-in"
+            description="Controle de acesso às unidades"
+            items={[
+              'Permitir múltiplos acessos por dia',
+              'Registrar tentativas bloqueadas',
+              'Janela de horário para check-in',
+            ]}
+          />
+        </div>
       </div>
     </div>
   );

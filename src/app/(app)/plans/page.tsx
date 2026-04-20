@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/common/Header';
-import { Input, Button, Card, Badge } from '@/components/ui';
+import { Input, Button, Card, Badge, SkeletonTable } from '@/components/ui';
 import {
   formatPrice,
   formatPlanUpdatedAt,
@@ -12,7 +12,25 @@ import {
   getPlanStatusLabel,
   type Plan,
   type PlanStatus,
+  type PlanAccessRules,
 } from '@/lib/plans/plansService';
+
+function getAccessSummary(rules: PlanAccessRules): string {
+  const parts: string[] = [];
+  const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  if (rules.allowedUnits?.length) parts.push(`${rules.allowedUnits.length} unidade(s)`);
+  if (rules.allowedDays?.length) {
+    if (rules.allowedDays.length === 5 && [1,2,3,4,5].every(d => rules.allowedDays!.includes(d))) {
+      parts.push('Seg–Sex');
+    } else {
+      parts.push(rules.allowedDays.map(d => days[d]).join(', '));
+    }
+  }
+  if (rules.allowedHours?.start || rules.allowedHours?.end) {
+    parts.push(`${rules.allowedHours.start || '00:00'}–${rules.allowedHours.end || '23:59'}`);
+  }
+  return parts.length > 0 ? parts.join(' · ') : 'Livre';
+}
 
 interface PlanCardProps {
   plan: Plan;
@@ -58,7 +76,7 @@ function PlanCard({ plan, onClick }: PlanCardProps) {
         <div className="text-right">
           <p className="text-xs text-[var(--text-tertiary)] mb-1">Acesso</p>
           <p className="text-sm font-medium text-[var(--text-primary)]">
-            {plan.accessRules.allowedUnits?.length ? `${plan.accessRules.allowedUnits.length} unidade(s)` : 'Livre'}
+            {getAccessSummary(plan.accessRules)}
           </p>
         </div>
       </div>
@@ -259,13 +277,13 @@ export default function PlansPage() {
         </Card>
 
         {loading ? (
-          <Card className="p-12 text-center">
-            <p className="text-[var(--text-tertiary)]">Carregando planos...</p>
-          </Card>
+          <SkeletonTable rows={5} cols={5} />
         ) : filteredPlans.length === 0 ? (
           <Card className="p-12 text-center">
-            <p className="text-[var(--text-tertiary)] mb-2">Nenhum plano encontrado</p>
-            <p className="text-sm text-[var(--text-tertiary)]">Ajuste os filtros ou cadastre um novo plano.</p>
+            <svg className="w-12 h-12 mx-auto text-[var(--element-tertiary)] mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+            <p className="font-medium text-[var(--text-primary)] mb-1">Nenhum plano encontrado</p>
+            <p className="text-sm text-[var(--text-tertiary)] mb-4 max-w-sm mx-auto">Crie seu primeiro plano para começar a vender e ativar alunos.</p>
+            <Button onClick={() => router.push('/plans/new')}>+ Novo Plano</Button>
           </Card>
         ) : viewMode === 'cards' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

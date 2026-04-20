@@ -7,6 +7,8 @@ export type {
   HealthMetric,
   QuickAction,
   HomeKpis,
+  ActivationChecklist,
+  DashboardKpis,
   HomeData,
 } from './homeServiceSupabase';
 

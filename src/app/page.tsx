@@ -2,12 +2,14 @@
 
 /**
  * Página Inicial
- * Direciona para login apropriado ou dashboard
+ * Landing page para visitantes, redirect para usuários autenticados
  */
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { LandingPage } from '@/components/landing/LandingPage';
+import { capture, getDeviceType } from '@/lib/analytics';
 
 export default function Home() {
   const router = useRouter();
@@ -16,7 +18,6 @@ export default function Home() {
   useEffect(() => {
     if (isLoading) return;
 
-    // Se autenticado, redirecionar para área correta
     if (isAuthenticated) {
       if (isStaff) {
         router.push('/home');
@@ -24,26 +25,28 @@ export default function Home() {
         router.push('/aluno');
       }
     } else {
-      // Se não autenticado, redirecionar para login da equipe (default)
-      router.push('/login');
+      capture('landing_viewed', {
+        path: window.location.pathname,
+        referrer: document.referrer,
+        device_type: getDeviceType(),
+      });
     }
   }, [isAuthenticated, isStaff, isStudent, isLoading, router]);
 
-  // Mostrar loading enquanto verifica
-  return (
-    <div 
-      className="min-h-screen flex items-center justify-center"
-      style={{ backgroundColor: 'var(--background-secondary)' }}
-    >
-      <div className="text-center">
-        <div 
-          className="inline-flex items-center justify-center w-16 h-16 rounded-2xl mb-4"
-          style={{ backgroundColor: 'var(--element-primary)' }}
-        >
-          <span className="text-2xl font-bold" style={{ color: 'var(--background-primary)' }}>M</span>
-        </div>
-        <p style={{ color: 'var(--element-secondary)' }}>Carregando...</p>
+  // Show spinner while checking auth (prevents flash of landing for authenticated users)
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-950">
+        <div className="animate-spin w-8 h-8 border-2 border-t-transparent border-cyan-400 rounded-full" />
       </div>
-    </div>
-  );
+    );
+  }
+
+  // Authenticated user being redirected
+  if (isAuthenticated) {
+    return null;
+  }
+
+  // Show landing page for visitors
+  return <LandingPage />;
 }

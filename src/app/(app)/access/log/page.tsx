@@ -7,6 +7,17 @@ import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { SkeletonTable } from '@/components/ui/Skeleton';
+import {
+  ArrowLeft,
+  Search,
+  SlidersHorizontal,
+  Check,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+} from 'lucide-react';
 import {
   getAccessLogs,
   getAccessUnits,
@@ -19,51 +30,7 @@ import {
   type AccessStatus,
   type AccessMethod,
   type AccessUnit,
-} from '@/lib/access/accessService';
-
-// Ícones inline
-const icons = {
-  back: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-    </svg>
-  ),
-  search: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-    </svg>
-  ),
-  filter: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-    </svg>
-  ),
-  check: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-    </svg>
-  ),
-  x: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  ),
-  chevronLeft: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-    </svg>
-  ),
-  chevronRight: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-    </svg>
-  ),
-  download: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-    </svg>
-  ),
-};
+} from '@/lib/access';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -118,13 +85,11 @@ export default function AccessLogPage() {
     loadData();
   }, [search, statusFilter, methodFilter, unitFilter]);
 
-  const filteredData = useMemo(() => logs, [logs]);
-
-  const totalPages = Math.ceil(filteredData.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(logs.length / ITEMS_PER_PAGE);
   const paginatedData = useMemo(() => {
     const start = (page - 1) * ITEMS_PER_PAGE;
-    return filteredData.slice(start, start + ITEMS_PER_PAGE);
-  }, [filteredData, page]);
+    return logs.slice(start, start + ITEMS_PER_PAGE);
+  }, [logs, page]);
 
   // Reset page when filters change
   const handleFilterChange = useCallback(() => {
@@ -153,7 +118,7 @@ export default function AccessLogPage() {
             href="/access"
             className="p-2 rounded-lg hover:bg-[var(--background-secondary)] transition-colors"
           >
-            {icons.back}
+            <ArrowLeft className="w-4 h-4" />
           </Link>
           <div>
             <h1 className="text-2xl font-bold text-[var(--element-primary)]">
@@ -172,7 +137,7 @@ export default function AccessLogPage() {
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
                 <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-[var(--element-disabled)]">
-                  {icons.search}
+                  <Search className="w-4 h-4" />
                 </div>
                 <Input
                   type="text"
@@ -192,7 +157,7 @@ export default function AccessLogPage() {
                   onClick={() => setShowFilters(!showFilters)}
                   className="flex items-center gap-2"
                 >
-                  {icons.filter}
+                  <SlidersHorizontal className="w-4 h-4" />
                   <span className="hidden sm:inline">Filtros</span>
                   {hasActiveFilters && (
                     <span className="w-2 h-2 rounded-full bg-[var(--element-accent)]" />
@@ -204,7 +169,7 @@ export default function AccessLogPage() {
                   className="flex items-center gap-2"
                   title="Exportar CSV"
                 >
-                  {icons.download}
+                  <Download className="w-4 h-4" />
                   <span className="hidden sm:inline">Exportar</span>
                 </Button>
               </div>
@@ -277,7 +242,7 @@ export default function AccessLogPage() {
         {/* Results Count */}
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm text-[var(--element-secondary)]">
-            {isLoading ? 'Carregando registros...' : `${filteredData.length} registro(s) encontrado(s)`}
+            {isLoading ? '\u00A0' : `${logs.length} registro(s) encontrado(s)`}
           </p>
         </div>
 
@@ -350,7 +315,7 @@ export default function AccessLogPage() {
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
               >
-                {icons.chevronLeft}
+                <ChevronLeft className="w-4 h-4" />
                 <span className="hidden sm:inline ml-1">Anterior</span>
               </Button>
               <Button
@@ -360,7 +325,7 @@ export default function AccessLogPage() {
                 disabled={page === totalPages}
               >
                 <span className="hidden sm:inline mr-1">Próximo</span>
-                {icons.chevronRight}
+                <ChevronRight className="w-4 h-4" />
               </Button>
             </div>
           </div>
@@ -373,6 +338,7 @@ export default function AccessLogPage() {
 // Row Component
 function AccessLogRow({ attempt }: { attempt: AccessAttempt }) {
   const isAllowed = attempt.status === 'allowed';
+  const eventLabel = attempt.eventType === 'entry' ? 'Entrada' : attempt.eventType === 'exit' ? 'Saída' : null;
 
   return (
     <tr className="hover:bg-[var(--background-secondary)] transition-colors">
@@ -386,7 +352,7 @@ function AccessLogRow({ attempt }: { attempt: AccessAttempt }) {
                 : 'bg-[var(--status-negative-background)] text-[var(--status-negative)]'
             }`}
           >
-            {isAllowed ? icons.check : icons.x}
+            {isAllowed ? <Check className="w-4 h-4" /> : <X className="w-4 h-4" />}
           </div>
           <Badge variant={isAllowed ? 'default' : 'destructive'} className="text-xs">
             {getAccessStatusLabel(attempt.status)}
@@ -417,9 +383,12 @@ function AccessLogRow({ attempt }: { attempt: AccessAttempt }) {
 
       {/* Method */}
       <td className="px-4 py-3">
-        <Badge variant="outline" className="text-xs">
-          {getAccessMethodLabel(attempt.method)}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="outline" className="text-xs">
+            {getAccessMethodLabel(attempt.method)}
+          </Badge>
+          {eventLabel && <Badge className="text-xs">{eventLabel}</Badge>}
+        </div>
       </td>
 
       {/* DateTime */}

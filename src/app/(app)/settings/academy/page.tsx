@@ -8,8 +8,12 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
+import { SkeletonCard } from '@/components/ui/Skeleton';
+import { toast } from 'sonner';
 import { getAcademy, updateAcademy, type Academy } from '@/lib/settings';
 import { getCurrentSession } from '@/lib/auth/authService';
+
+type NestedAcademyField = 'address' | 'preferences';
 
 // Máscaras simples
 function formatCNPJ(value: string): string {
@@ -94,13 +98,17 @@ export default function AcademyPage() {
 
     if (field.includes('.')) {
       const [parent, child] = field.split('.');
-      setFormData((prev) => ({
-        ...prev,
-        [parent]: {
-          ...(prev[parent as keyof Academy] as Record<string, unknown>),
-          [child]: value,
-        },
-      }));
+      if (parent === 'address' || parent === 'preferences') {
+        const nestedParent = parent as NestedAcademyField;
+
+        setFormData((prev) => ({
+          ...prev,
+          [nestedParent]: {
+            ...prev[nestedParent],
+            [child]: value,
+          },
+        }));
+      }
     } else {
       setFormData((prev) => ({ ...prev, [field]: value }));
     }
@@ -125,7 +133,7 @@ export default function AcademyPage() {
       const result = await updateAcademy(formData, userId);
       if (result.success) {
         setHasChanges(false);
-        // Redireciona para settings após salvar
+        toast.success('Dados da academia salvos com sucesso.');
         setTimeout(() => router.push('/settings'), 500);
       } else {
         setErrorMessage(result.error || 'Não foi possível salvar os dados. Tente novamente.');
@@ -142,8 +150,10 @@ export default function AcademyPage() {
     return (
       <div className="flex flex-col h-full bg-[var(--background-secondary)]">
         <Header title="Dados da Academia" />
-        <div className="flex-1 flex items-center justify-center">
-          <p className="text-[var(--element-secondary)]">Carregando...</p>
+        <div className="p-4 lg:p-6 max-w-3xl mx-auto w-full space-y-4">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
         </div>
       </div>
     );

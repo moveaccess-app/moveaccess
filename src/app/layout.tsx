@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { AnalyticsProvider } from "@/lib/analytics";
+import { Toaster } from "sonner";
 
 export const metadata: Metadata = {
   title: "MoveAccess",
@@ -40,7 +42,18 @@ export default function RootLayout({
       <body className="antialiased">
         <ThemeProvider>
           <AuthProvider>
-            {children}
+            <AnalyticsProvider>
+              {children}
+              <Toaster
+              position="top-right"
+              richColors
+              closeButton
+              duration={4000}
+              toastOptions={{
+                className: 'text-sm',
+              }}
+            />
+            </AnalyticsProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

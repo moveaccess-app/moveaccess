@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Label } from '@/components/ui/Label';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { toast } from 'sonner';
 import {
   getStaffUsers,
   getRoles,
@@ -172,8 +174,10 @@ function StaffModal({
         </div>
 
         {isLoadingData ? (
-          <div className="p-6 text-center">
-            <p className="text-sm text-[var(--element-secondary)]">Carregando...</p>
+          <div className="p-6 space-y-4">
+            <Skeleton height="h-5" width="w-full" />
+            <Skeleton height="h-5" width="w-full" />
+            <Skeleton height="h-5" width="w-2/3" />
           </div>
         ) : (
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
@@ -326,9 +330,15 @@ export default function TeamPage() {
 
   const handleSave = async (data: StaffSavePayload) => {
     if (editingStaff) {
-      const result = await updateStaffUser(editingStaff.id, data);
+      const result = await updateStaffUser(editingStaff.id, {
+        roleId: data.roleId,
+        status: data.status,
+        unitIds: data.unitIds,
+        phone: data.phone ?? undefined,
+      });
       if (result.error) {
         console.error('[TeamPage] Erro ao atualizar membro:', result.error);
+        toast.error('Erro ao atualizar membro.');
         return;
       }
     } else {
@@ -343,6 +353,7 @@ export default function TeamPage() {
 
       if (result.error) {
         console.error('[TeamPage] Erro ao criar membro:', result.error);
+        toast.error('Erro ao criar membro.');
         return;
       }
     }
@@ -350,14 +361,17 @@ export default function TeamPage() {
     await loadStaffList();
     setEditingStaff(null);
     setIsCreating(false);
+    toast.success(editingStaff ? 'Membro atualizado.' : 'Membro adicionado.');
   };
 
   const handleToggleStatus = async (staff: StaffUser) => {
     const result = await toggleStaffStatus(staff.id, staff.status);
     if (result.error) {
       console.error('[TeamPage] Erro ao alterar status:', result.error);
+      toast.error('Erro ao alterar status.');
       return;
     }
+    toast.success(staff.status === 'active' ? 'Membro desativado.' : 'Membro reativado.');
     await loadStaffList();
   };
 
@@ -380,7 +394,7 @@ export default function TeamPage() {
           <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-sm text-[var(--element-secondary)]">
-                {isLoading ? 'Carregando...' : `${activeCount} membro${activeCount !== 1 ? 's' : ''} ativo${activeCount !== 1 ? 's' : ''}`}
+                {isLoading ? '\u00A0' : `${activeCount} membro${activeCount !== 1 ? 's' : ''} ativo${activeCount !== 1 ? 's' : ''}`}
               </p>
             </div>
             <Button onClick={() => setIsCreating(true)} disabled={isLoading}>
@@ -407,9 +421,19 @@ export default function TeamPage() {
 
           {/* Loading state */}
           {isLoading && (
-            <Card className="p-8 text-center">
-              <p className="text-[var(--element-secondary)]">Carregando equipe...</p>
-            </Card>
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="rounded-lg border border-[var(--divider-primary)] bg-[var(--background-primary)] p-4 space-y-2">
+                  <div className="flex items-center gap-3">
+                    <Skeleton height="h-10" width="w-10" circle />
+                    <div className="space-y-1 flex-1">
+                      <Skeleton height="h-4" width="w-32" />
+                      <Skeleton height="h-3" width="w-48" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
 
           {/* Lista */}
