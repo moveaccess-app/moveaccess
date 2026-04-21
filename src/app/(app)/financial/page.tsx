@@ -11,6 +11,7 @@ import {
   ChargesList,
   DelinquentStudentsList,
   ExtratoOperacional,
+  OperationalCommandCenter,
   OverdueList,
   SubscriptionsList,
 } from './components';
@@ -39,14 +40,16 @@ import {
   TrendingUp,
   TrendingDown,
   RefreshCw,
+  Workflow,
   Eye,
   EyeOff,
   X,
 } from 'lucide-react';
 
-type TabType = 'dashboard' | 'extrato' | 'charges' | 'subscriptions' | 'overdue' | 'delinquents';
+type TabType = 'command' | 'dashboard' | 'extrato' | 'charges' | 'subscriptions' | 'overdue' | 'delinquents';
 
 const TABS: { id: TabType; label: string; icon: ReactNode }[] = [
+  { id: 'command', label: 'Command Center', icon: <Workflow className="w-4 h-4" /> },
   { id: 'dashboard', label: 'Visão Geral', icon: <BarChart3 className="w-4 h-4" /> },
   { id: 'extrato', label: 'Extrato', icon: <FileText className="w-4 h-4" /> },
   { id: 'charges', label: 'Cobranças', icon: <ClipboardList className="w-4 h-4" /> },
@@ -180,7 +183,7 @@ function RevenueChart({
 }
 
 export default function FinancialPage() {
-  const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [activeTab, setActiveTab] = useState<TabType>('command');
   const [showValues, setShowValues] = useState(true);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
@@ -509,6 +512,15 @@ export default function FinancialPage() {
             <SkeletonStats count={6} />
             <SkeletonTable rows={5} cols={4} />
           </div>
+        ) : activeTab === 'command' ? (
+          <OperationalCommandCenter
+            showValues={showValues}
+            reloadToken={reloadKey}
+            onCreateCharge={() => setCreateOpen(true)}
+            onOpenOverdue={() => setActiveTab('overdue')}
+            onOpenCharges={() => setActiveTab('charges')}
+            onGlobalRefresh={() => setReloadKey((current) => current + 1)}
+          />
         ) : activeTab === 'dashboard' ? (
           renderDashboard()
         ) : activeTab === 'extrato' ? (

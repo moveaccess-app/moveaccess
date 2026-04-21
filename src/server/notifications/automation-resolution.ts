@@ -12,6 +12,7 @@ import {
   paymentConfirmedKey,
   sendNotification,
 } from './notification-service';
+import { getAcademyRuntimePolicy } from './policy-runtime';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -71,6 +72,12 @@ export async function resolveAutomationsForPayment(
       return result;
     }
 
+    const academyPolicy = await getAcademyRuntimePolicy(supabase, payment.academy_id);
+
+    if (!academyPolicy.billing.paymentConfirmed.enabled) {
+      return result;
+    }
+
     // Load student profile
     const { data: profile } = await supabase
       .from('profiles')
@@ -103,16 +110,8 @@ export async function resolveAutomationsForPayment(
       }
     }
 
-    // Load academy name
-    const { data: academy } = await supabase
-      .from('academies')
-      .select('trade_name')
-      .eq('id', payment.academy_id)
-      .single();
-
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : 'http://localhost:3000';
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL
+      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
 
     // 3. Send confirmation email
     const idemKey = paymentConfirmedKey(paymentId);
@@ -121,7 +120,7 @@ export async function resolveAutomationsForPayment(
       planName,
       amount: payment.amount,
       paidDate: payment.paid_at || new Date().toISOString(),
-      academyName: academy?.trade_name || 'Academia',
+      academyName: academyPolicy.academyName || 'Academia',
       portalUrl: `${appUrl}/aluno`,
     });
 

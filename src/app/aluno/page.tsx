@@ -118,6 +118,7 @@ export default function StudentPortalPage() {
   const router = useRouter();
   const { currentUser, logout } = useAuth();
   const { isLoading: authLoading, isAuthorized } = useRequireStudent();
+  const academyId = currentUser?.tenancy.academyIds[0] ?? null;
   const [hasPendingSignup, setHasPendingSignup] = useState(false);
   const [portalData, setPortalData] = useState<StudentPortalData | null>(null);
   const [portalLoading, setPortalLoading] = useState(true);
@@ -142,8 +143,9 @@ export default function StudentPortalPage() {
   useEffect(() => {
     if (authLoading || !isAuthorized || !currentUser) return;
     let mounted = true;
-    const academyId = currentUser.tenancy.academyIds[0];
     if (!academyId) {
+      setPortalError('Não foi possível identificar a academia vinculada à sua conta.');
+      setPortalData(null);
       setPortalLoading(false);
       return;
     }
@@ -162,7 +164,7 @@ export default function StudentPortalPage() {
     };
     void load();
     return () => { mounted = false; };
-  }, [authLoading, isAuthorized, currentUser]);
+  }, [academyId, authLoading, isAuthorized, currentUser]);
 
   // Consolidated status
   const portalStatus = useMemo<PortalStatusResult | null>(() => {
@@ -189,7 +191,12 @@ export default function StudentPortalPage() {
 
   const studentName = currentUser?.profile.name || 'Aluno';
   const planName = currentUser?.profile.planName;
-  const isPlanActive = currentUser?.profile.planStatus === 'active';
+  const hasActivePlanSnapshot = currentUser?.profile.planStatus === 'active';
+  const canShowQr = portalLoading
+    ? hasActivePlanSnapshot
+    : portalStatus
+      ? portalStatus.status !== 'blocked'
+      : hasActivePlanSnapshot;
   const statusConfig = portalStatus ? STATUS_CONFIG[portalStatus.status] : STATUS_CONFIG.active;
 
   return (
@@ -304,7 +311,7 @@ export default function StudentPortalPage() {
                   QR Code de Acesso
                 </h2>
               </div>
-              {isPlanActive ? (
+              {canShowQr ? (
                 <StudentQRCode studentName={studentName} />
               ) : (
                 <div className="text-center py-8 px-4">
@@ -346,41 +353,7 @@ export default function StudentPortalPage() {
         ) : portalData ? (
           <>
             {/* ─── ACCESS STATUS CARD ─── */}
-            {portalStatus && portalStatus.status === 'blocked' && (
-              <Card className="shadow-lg border-0" style={{ backgroundColor: 'var(--background-primary)' }}>
-                <CardContent className="py-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <ShieldX className="w-5 h-5" style={{ color: 'var(--status-negative)' }} />
-                    <h2 className="font-bold text-base" style={{ color: 'var(--element-primary)' }}>
-                      Situação do Acesso
-                    </h2>
-                  </div>
-                  <div
-                    className="p-3 rounded-xl"
-                    style={{ backgroundColor: 'var(--status-negative-background)' }}
-                  >
-                    <p className="font-semibold text-sm" style={{ color: 'var(--status-negative)' }}>
-                      {portalStatus.title}
-                    </p>
-                    <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--element-secondary)' }}>
-                      {getBlockExplanation(portalStatus)}
-                    </p>
-                  </div>
-
-                  {portalStatus.dominantReason === 'delinquent' && portalData.delinquency.isDelinquent && (
-                    <div className="mt-3 flex items-center justify-between text-xs" style={{ color: 'var(--element-secondary)' }}>
-                      <span>
-                        {portalData.delinquency.overdueCount} cobrança(s) vencida(s)
-                        {portalData.delinquency.daysDelinquent > 0 && ` · há ${portalData.delinquency.daysDelinquent} dias`}
-                      </span>
-                      <span className="font-semibold" style={{ color: 'var(--status-negative)' }}>
-                        {formatCurrency(portalData.delinquency.overdueTotal)}
-                      </span>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+            {portalStatus && <AccessStatusCard portalStatus={portalStatus} portalData={portalData} />}
 
             {/* ─── NEXT PAYMENT CARD ─── */}
             <NextPaymentCard portalStatus={portalStatus} portalData={portalData} />
@@ -652,7 +625,19 @@ export default function StudentPortalPage() {
               </CardContent>
             </Card>
           </>
-        ) : null}
+        ) : (
+          <Card className="shadow-lg border-0" style={{ backgroundColor: 'var(--background-primary)' }}>
+            <CardContent className="py-6 text-center">
+              <Info className="w-8 h-8 mx-auto mb-2" style={{ color: 'var(--status-alert)' }} />
+              <p className="font-medium text-sm" style={{ color: 'var(--element-primary)' }}>
+                Portal indisponível no momento
+              </p>
+              <p className="text-xs mt-1" style={{ color: 'var(--element-secondary)' }}>
+                Não foi possível carregar seus dados consolidados agora. Tente novamente em instantes.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Footer */}
         <div className="text-center pt-4 pb-2">
@@ -756,6 +741,75 @@ function NextPaymentCard({
   );
 }
 
+function AccessStatusCard({
+  portalStatus,
+  portalData,
+}: {
+  portalStatus: PortalStatusResult;
+  portalData: StudentPortalData;
+}) {
+  const isBlocked = portalStatus.status === 'blocked';
+  const isAttention = portalStatus.status === 'attention';
+
+  return (
+    <Card className="shadow-lg border-0" style={{ backgroundColor: 'var(--background-primary)' }}>
+      <CardContent className="py-4">
+        <div className="flex items-center gap-2 mb-3">
+          {isBlocked ? (
+            <ShieldX className="w-5 h-5" style={{ color: 'var(--status-negative)' }} />
+          ) : isAttention ? (
+            <ShieldAlert className="w-5 h-5" style={{ color: 'var(--status-alert)' }} />
+          ) : (
+            <ShieldCheck className="w-5 h-5" style={{ color: 'var(--status-positive)' }} />
+          )}
+          <h2 className="font-bold text-base" style={{ color: 'var(--element-primary)' }}>
+            Situação do Acesso
+          </h2>
+        </div>
+
+        <div
+          className="p-3 rounded-xl"
+          style={{
+            backgroundColor: isBlocked
+              ? 'var(--status-negative-background)'
+              : isAttention
+                ? 'var(--status-alert-background)'
+                : 'var(--status-positive-background)',
+          }}
+        >
+          <p
+            className="font-semibold text-sm"
+            style={{
+              color: isBlocked
+                ? 'var(--status-negative)'
+                : isAttention
+                  ? 'var(--status-alert)'
+                  : 'var(--status-positive)',
+            }}
+          >
+            {portalStatus.title}
+          </p>
+          <p className="text-xs mt-1 leading-relaxed" style={{ color: 'var(--element-secondary)' }}>
+            {getStatusExplanation(portalStatus)}
+          </p>
+        </div>
+
+        {portalStatus.dominantReason === 'delinquent' && portalData.delinquency.isDelinquent && (
+          <div className="mt-3 flex items-center justify-between text-xs" style={{ color: 'var(--element-secondary)' }}>
+            <span>
+              {portalData.delinquency.overdueCount} cobrança(s) vencida(s)
+              {portalData.delinquency.daysDelinquent > 0 && ` · há ${portalData.delinquency.daysDelinquent} dias`}
+            </span>
+            <span className="font-semibold" style={{ color: 'var(--status-negative)' }}>
+              {formatCurrency(portalData.delinquency.overdueTotal)}
+            </span>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function PortalSkeleton() {
   return (
     <div className="space-y-4">
@@ -769,7 +823,7 @@ function PortalSkeleton() {
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
-function getBlockExplanation(status: PortalStatusResult): string {
+function getStatusExplanation(status: PortalStatusResult): string {
   switch (status.dominantReason) {
     case 'delinquent':
       return 'Existe uma pendência financeira impedindo seu acesso. Regularize o pagamento para liberar a entrada na academia.';
@@ -781,6 +835,16 @@ function getBlockExplanation(status: PortalStatusResult): string {
       return 'Você não possui um plano ativo no momento. Procure a recepção para ativar um plano.';
     case 'plan_inactive':
       return 'Seu plano está inativo. Procure a recepção da academia para reativar.';
+    case 'payment_due_soon':
+      return 'Seu acesso segue liberado, mas há uma cobrança próxima do vencimento. Antecipar o pagamento evita fricção na entrada.';
+    case 'payment_overdue_mild':
+      return 'Há uma cobrança em aberto ou em processamento. Regularize ou confirme com a academia para evitar bloqueio.';
+    case 'no_contract':
+      return 'Seu contrato ainda não aparece como aceito no sistema. O QR pode funcionar, mas vale confirmar essa pendência com a academia.';
+    case 'subscription_expiring_soon':
+      return 'Seu plano está próximo do vencimento. Confirme a renovação para continuar com acesso liberado.';
+    case null:
+      return 'Seu acesso está liberado agora. Use o QR na entrada e acompanhe abaixo suas cobranças, contrato e histórico.';
     default:
       return 'Seu acesso está temporariamente bloqueado. Entre em contato com a academia.';
   }

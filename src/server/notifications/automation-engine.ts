@@ -34,6 +34,7 @@ import {
   sendNotification,
   type SendNotificationResult,
 } from './notification-service';
+import { loadAcademyRuntimePolicies } from './policy-runtime';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -135,9 +136,15 @@ async function findNotificationLogId(
 // ─── App URL ─────────────────────────────────────────────────
 
 function getAppUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : 'http://localhost:3000';
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL;
+  }
+
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+
+  return 'http://localhost:3000';
 }
 
 // ─── Main automation evaluation ──────────────────────────────
@@ -355,6 +362,10 @@ export async function evaluateAndExecuteAutomations(
 
   try {
     const candidates = await findRegularizationCandidates(supabase);
+    const policyMap = await loadAcademyRuntimePolicies(
+      supabase,
+      candidates.map((candidate) => candidate.academyId),
+    );
 
     for (const c of candidates) {
       // First, resolve all pending automation actions for this student
@@ -364,6 +375,14 @@ export async function evaluateAndExecuteAutomations(
       );
 
       summary.regularizations.resolved += resolvedCount ?? 0;
+
+      const academyPolicy = policyMap.get(c.academyId);
+
+      if (!academyPolicy?.billing.regularization.enabled) {
+        summary.regularizations.attempted++;
+        summary.regularizations.skipped++;
+        continue;
+      }
 
       // Then send regularization confirmation email
       const idemKey = regularizationKey(c.studentId, c.academyId);

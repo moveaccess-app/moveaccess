@@ -3,6 +3,8 @@
  * Fetches aggregated portal data for the authenticated student via RPC.
  */
 
+import { createClient } from '@/lib/supabase/client';
+
 const API_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const API_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -80,15 +82,41 @@ function getStorageKey(): string {
   return `sb-${projectRef}-auth-token`;
 }
 
-function getAccessToken(): string | null {
+async function getAccessToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
+
+  try {
+    const { data, error } = await createClient().auth.getSession();
+    if (!error && data.session?.access_token) {
+      return data.session.access_token;
+    }
+  } catch {
+    // Fallback to storage parsing for legacy sessions.
+  }
 
   const stored = localStorage.getItem(getStorageKey());
   if (!stored) return null;
 
   try {
     const session = JSON.parse(stored);
-    return session.access_token || null;
+    if (typeof session?.access_token === 'string') {
+      return session.access_token;
+    }
+
+    if (typeof session?.currentSession?.access_token === 'string') {
+      return session.currentSession.access_token;
+    }
+
+    if (typeof session?.session?.access_token === 'string') {
+      return session.session.access_token;
+    }
+
+    if (Array.isArray(session)) {
+      const firstSession = session.find((entry) => typeof entry?.access_token === 'string');
+      return firstSession?.access_token || null;
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -99,7 +127,7 @@ function getAccessToken(): string | null {
 export async function getStudentPortalData(
   academyId: string
 ): Promise<{ data: StudentPortalData | null; error: string | null }> {
-  const token = getAccessToken();
+  const token = await getAccessToken();
 
   if (!token || !API_URL || !API_KEY) {
     return { data: null, error: 'Não autenticado' };

@@ -30,6 +30,17 @@ import {
   type Payment,
   type PaymentMethod,
 } from '@/lib/payments/paymentService';
+import {
+  getAutomationStageLabel,
+  getAutomationStatusLabel,
+  getAutomationStatusVariant,
+  getAutomationTriggerLabel,
+  getCommandCenterQueueLabel,
+  getCommandCenterQueueVariant,
+  getSyncIssueLabel,
+  getSyncIssueVariant,
+  type CommandCenterCaseDetail,
+} from '@/lib/payments/commandCenter';
 import { ChargeTroubleshooting } from '../../components/ChargeTroubleshooting';
 
 const PAYMENT_METHOD_OPTIONS: { value: PaymentMethod; label: string }[] = [
@@ -52,6 +63,9 @@ export default function FinancialChargeDetailPage() {
 
   const [payment, setPayment] = useState<Payment | null>(null);
   const [studentPayments, setStudentPayments] = useState<Payment[]>([]);
+  const [caseDetail, setCaseDetail] = useState<CommandCenterCaseDetail | null>(null);
+  const [caseDetailLoading, setCaseDetailLoading] = useState(false);
+  const [caseDetailError, setCaseDetailError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -74,6 +88,8 @@ export default function FinancialChargeDetailPage() {
 
       setLoading(true);
       setError(null);
+      setCaseDetail(null);
+      setCaseDetailError(null);
 
       const loadedPayment = await getPaymentById(paymentId);
       if (!loadedPayment) {
@@ -90,6 +106,34 @@ export default function FinancialChargeDetailPage() {
         ? await getPaymentsByStudent(loadedPayment.student.id)
         : [];
 
+      setCaseDetailLoading(true);
+
+      let loadedCaseDetail: CommandCenterCaseDetail | null = null;
+      let loadedCaseDetailError: string | null = null;
+
+      try {
+        const response = await fetch(
+          `/api/financial/command-center/cases/${loadedPayment.id}?academyId=${loadedPayment.academyId}`,
+          { cache: 'no-store' },
+        );
+
+        const payload = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          loadedCaseDetailError =
+            typeof payload?.error === 'string'
+              ? payload.error
+              : 'Não foi possível carregar o contexto operacional desta cobrança.';
+        } else {
+          loadedCaseDetail = payload as CommandCenterCaseDetail;
+        }
+      } catch (caseError) {
+        loadedCaseDetailError =
+          caseError instanceof Error
+            ? caseError.message
+            : 'Não foi possível carregar o contexto operacional desta cobrança.';
+      }
+
       if (cancelled) {
         return;
       }
@@ -99,6 +143,9 @@ export default function FinancialChargeDetailPage() {
       setPaidReference(loadedPayment.reference || '');
       setPaidAt(toDateTimeLocalValue(loadedPayment.paidAt || new Date().toISOString()));
       setStudentPayments(relatedPayments.filter((item: Payment) => item.id !== loadedPayment.id));
+      setCaseDetail(loadedCaseDetail);
+      setCaseDetailError(loadedCaseDetailError);
+      setCaseDetailLoading(false);
       setLoading(false);
     };
 
@@ -396,6 +443,192 @@ export default function FinancialChargeDetailPage() {
                 />
               )}
             </div>
+
+            <Card className="p-6">
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-[var(--element-primary)]">Operação do caso</h2>
+                  <p className="text-sm text-[var(--element-secondary)]">
+                    Timeline real de cobrança, automations, notificações e inconsistências desta cobrança.
+                  </p>
+                </div>
+                {caseDetail?.case && (
+                  <Badge variant={getCommandCenterQueueVariant(caseDetail.case.queueStatus)}>
+                    {getCommandCenterQueueLabel(caseDetail.case.queueStatus)}
+                  </Badge>
+                )}
+              </div>
+
+              {caseDetailLoading ? (
+                <div className="space-y-3">
+                  <div className="h-20 rounded-xl bg-[var(--background-tertiary)] animate-pulse" />
+                  <div className="h-20 rounded-xl bg-[var(--background-tertiary)] animate-pulse" />
+                </div>
+              ) : caseDetailError ? (
+                <div className="rounded-xl border border-[var(--status-negative)]/20 bg-[var(--status-negative)]/5 px-4 py-3 text-sm text-[var(--status-negative)]">
+                  {caseDetailError}
+                </div>
+              ) : caseDetail ? (
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div className="rounded-xl bg-[var(--background-tertiary)] p-4">
+                        <div className="text-xs text-[var(--element-disabled)] mb-1">Automação atual</div>
+                        <div className="flex items-center gap-2 flex-wrap mb-2">
+                          <Badge variant={getAutomationStatusVariant(caseDetail.case.automation.status)}>
+                            {getAutomationStatusLabel(caseDetail.case.automation.status)}
+                          </Badge>
+                          {caseDetail.case.automation.stage && (
+                            <Badge variant="outline">
+                              {getAutomationStageLabel(caseDetail.case.automation.stage)}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="font-medium text-[var(--element-primary)]">
+                          {getAutomationTriggerLabel(caseDetail.case.automation.triggerType)}
+                        </div>
+                        <div className="text-sm text-[var(--element-secondary)] mt-2">
+                          {caseDetail.case.automation.reason || 'Sem justificativa adicional registrada.'}
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl bg-[var(--background-tertiary)] p-4">
+                        <div className="text-xs text-[var(--element-disabled)] mb-1">Inadimplência do aluno</div>
+                        {caseDetail.studentDelinquency ? (
+                          <>
+                            <div className="font-medium text-[var(--element-primary)]">
+                              {caseDetail.studentDelinquency.overdueCount} cobrança(s)
+                            </div>
+                            <div className="text-sm text-[var(--element-secondary)] mt-2">
+                              {formatCurrency(caseDetail.studentDelinquency.overdueTotal)} em aberto • {caseDetail.studentDelinquency.daysDelinquent} dia(s) de atraso
+                            </div>
+                          </>
+                        ) : (
+                          <div className="text-sm text-[var(--element-secondary)]">
+                            Aluno sem inadimplência agregada no momento.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {caseDetail.recommendedAutomation && (
+                      <div className="rounded-xl border border-[var(--status-info)]/20 bg-[var(--status-info-background)] px-4 py-3">
+                        <div className="text-xs font-medium text-[var(--status-info)] mb-1">Próxima automação elegível</div>
+                        <div className="font-medium text-[var(--element-primary)]">
+                          {getAutomationTriggerLabel(caseDetail.recommendedAutomation.triggerType)} • {getAutomationStageLabel(caseDetail.recommendedAutomation.stage)}
+                        </div>
+                        <div className="text-sm text-[var(--element-secondary)] mt-2">
+                          {caseDetail.recommendedAutomation.reason}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold text-[var(--element-primary)]">Timeline de automations</h3>
+                      {caseDetail.automationTimeline.length === 0 ? (
+                        <div className="rounded-xl border border-[var(--divider-primary)] px-4 py-3 text-sm text-[var(--element-secondary)]">
+                          Nenhuma automação registrada para este caso ou para o aluno neste período.
+                        </div>
+                      ) : (
+                        caseDetail.automationTimeline.map((item) => (
+                          <div key={item.id} className="rounded-xl border border-[var(--divider-primary)] px-4 py-3">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium text-[var(--element-primary)]">
+                                {getAutomationTriggerLabel(item.triggerType)}
+                              </span>
+                              <Badge variant={getAutomationStatusVariant(item.status)}>
+                                {getAutomationStatusLabel(item.status)}
+                              </Badge>
+                              <Badge variant="outline">{getAutomationStageLabel(item.stage)}</Badge>
+                            </div>
+                            <div className="mt-2 text-sm text-[var(--element-secondary)]">
+                              Criada em {formatPaymentDateTime(item.createdAt)}
+                              {item.executedAt && ` • executada em ${formatPaymentDateTime(item.executedAt)}`}
+                              {item.resolvedAt && ` • resolvida em ${formatPaymentDateTime(item.resolvedAt)}`}
+                            </div>
+                            {item.errorMessage && (
+                              <div className="mt-2 text-sm text-[var(--status-negative)]">{item.errorMessage}</div>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold text-[var(--element-primary)]">Timeline de comunicação</h3>
+                      {caseDetail.notificationTimeline.length === 0 ? (
+                        <div className="rounded-xl border border-[var(--divider-primary)] px-4 py-3 text-sm text-[var(--element-secondary)]">
+                          Nenhuma notificação registrada para este caso neste período.
+                        </div>
+                      ) : (
+                        caseDetail.notificationTimeline.map((item) => (
+                          <div key={item.id} className="rounded-xl border border-[var(--divider-primary)] px-4 py-3">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium text-[var(--element-primary)]">{item.type}</span>
+                              <Badge variant={item.status === 'sent' ? 'success' : item.status === 'failed' ? 'destructive' : 'warning'}>
+                                {item.status}
+                              </Badge>
+                              <Badge variant="secondary">{item.channel}</Badge>
+                            </div>
+                            <div className="mt-2 text-sm text-[var(--element-secondary)]">
+                              {formatPaymentDateTime(item.createdAt)}
+                              {item.recipientEmail && ` • ${item.recipientEmail}`}
+                            </div>
+                            {item.error && (
+                              <div className="mt-2 text-sm text-[var(--status-negative)]">{item.error}</div>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-semibold text-[var(--element-primary)]">Inconsistências e sync</h3>
+                      {caseDetail.syncIssues.length === 0 && caseDetail.syncIncidents.length === 0 ? (
+                        <div className="rounded-xl border border-[var(--status-positive)]/20 bg-[var(--status-positive)]/5 px-4 py-3 text-sm text-[var(--status-positive)]">
+                          Nenhum sinal crítico de sincronização para esta cobrança.
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {caseDetail.syncIssues.map((issue) => (
+                            <div key={`${issue.type}-${issue.eventId || issue.chargeId || issue.createdAt}`} className="rounded-xl border border-[var(--divider-primary)] px-4 py-3">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium text-[var(--element-primary)]">{getSyncIssueLabel(issue.type)}</span>
+                                <Badge variant={getSyncIssueVariant(issue.severity)}>
+                                  {issue.severity === 'destructive' ? 'Crítico' : 'Atenção'}
+                                </Badge>
+                              </div>
+                              <div className="mt-2 text-sm text-[var(--element-secondary)]">{issue.description}</div>
+                            </div>
+                          ))}
+
+                          {caseDetail.syncIncidents.map((incident) => (
+                            <div key={incident.eventId} className="rounded-xl border border-[var(--divider-primary)] px-4 py-3">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-medium text-[var(--element-primary)]">{incident.eventType}</span>
+                                <Badge variant={incident.status === 'failed' ? 'destructive' : 'warning'}>
+                                  {incident.status}
+                                </Badge>
+                              </div>
+                              <div className="mt-2 text-sm text-[var(--element-secondary)]">
+                                Recebido em {formatPaymentDateTime(incident.receivedAt)}
+                                {incident.errorMessage && ` • ${incident.errorMessage}`}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-[var(--divider-primary)] px-4 py-3 text-sm text-[var(--element-secondary)]">
+                  Nenhum contexto operacional adicional disponível para esta cobrança.
+                </div>
+              )}
+            </Card>
 
             <Card className="p-6">
               <div className="flex items-center justify-between gap-4 mb-4">

@@ -29,6 +29,8 @@ export interface BaseUser {
   name: string;
   email: string;
   user_type: UserType;
+  academy_ids?: string[];
+  unit_ids?: string[];
   avatar?: string;
   created_at: string;
   setup_completed?: boolean;
@@ -104,7 +106,14 @@ async function fetchMyProfile(accessToken: string): Promise<MyProfile | null> {
  */
 function profileToAuthUser(profile: MyProfile): AuthUser {
   // setup_completed comes from the updated my_profile view
-  const setupCompleted = (profile as Record<string, unknown>).setup_completed;
+  const profileExtras = profile as MyProfile & {
+    academy_ids?: string[] | null;
+    unit_ids?: string[] | null;
+    setup_completed?: boolean | null;
+  };
+  const setupCompleted = profileExtras.setup_completed;
+  const academyIds = Array.isArray(profileExtras.academy_ids) ? profileExtras.academy_ids : [];
+  const unitIds = Array.isArray(profileExtras.unit_ids) ? profileExtras.unit_ids : [];
 
   if (profile.user_type === 'staff') {
     return {
@@ -112,6 +121,8 @@ function profileToAuthUser(profile: MyProfile): AuthUser {
       name: profile.name || 'Usuário',
       email: profile.email || '',
       user_type: 'staff',
+      academy_ids: academyIds,
+      unit_ids: unitIds,
       role: (profile.role as StaffRole) || 'receptionist',
       permissions: profile.custom_permissions || [],
       staff_status: profile.staff_status || null,
@@ -126,6 +137,8 @@ function profileToAuthUser(profile: MyProfile): AuthUser {
     name: profile.name || 'Aluno',
     email: profile.email || '',
     user_type: 'student',
+    academy_ids: academyIds,
+    unit_ids: unitIds,
     cpf: profile.cpf || '',
     phone: profile.phone || '',
     plan_name: profile.plan_name || undefined,

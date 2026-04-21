@@ -6,7 +6,28 @@
  * TODO: Staff, Roles, Policies, Integrations, Audit (próximas iterações)
  */
 
+import { createClient } from '@/lib/supabase/client';
 import { getActiveAcademyId } from '@/lib/supabase/academyScope';
+import {
+  BILLING_POLICIES_DEFAULTS,
+  getEffectiveBillingPolicies,
+  validateBillingPolicies,
+} from './policies';
+import type {
+  BillingAutomationPolicy,
+  BillingPolicies,
+  DelinquencyPolicy,
+} from './policies';
+export {
+  BILLING_AUTOMATION_POLICY_DEFAULTS,
+  BILLING_POLICIES_DEFAULTS,
+  DELINQUENCY_POLICY_DEFAULTS,
+} from './policies';
+export type {
+  BillingAutomationPolicy,
+  BillingPolicies,
+  DelinquencyPolicy,
+} from './policies';
 
 // ============================================================================
 // TIPOS (compatíveis com settingsMock)
@@ -26,16 +47,6 @@ export interface Address {
   zipCode: string;
 }
 
-export interface DelinquencyPolicy {
-  blockAccess: boolean;
-  graceDays: number;
-}
-
-export const DELINQUENCY_POLICY_DEFAULTS: DelinquencyPolicy = {
-  blockAccess: false,
-  graceDays: 0,
-};
-
 export interface AcademyPreferences {
   language: string;
   timezone: string;
@@ -46,6 +57,7 @@ export interface AcademyPreferences {
     blockSecondEntryWithoutExit: boolean;
   };
   delinquency?: DelinquencyPolicy;
+  billing?: BillingAutomationPolicy;
 }
 
 export interface OperatingHour {
@@ -106,8 +118,18 @@ function getStorageKey(): string {
   return `sb-${projectRef}-auth-token`;
 }
 
-function getAccessToken(): string | null {
+async function getAccessToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
+
+  try {
+    const { data, error } = await createClient().auth.getSession();
+
+    if (!error && data.session?.access_token) {
+      return data.session.access_token;
+    }
+  } catch {
+    // Fallback para parsing legado abaixo.
+  }
   
   const stored = localStorage.getItem(getStorageKey());
   if (!stored) return null;
@@ -124,7 +146,7 @@ async function fetchSupabase<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<{ data: T | null; error: string | null }> {
-  const token = getAccessToken();
+  const token = await getAccessToken();
   
   if (!token) {
     return { data: null, error: 'Não autenticado' };
@@ -205,6 +227,8 @@ function rowToAcademy(row: AcademyRow): Academy {
     blockSecondEntryWithoutExit: false,
   };
 
+  const effectivePolicies = getEffectiveBillingPolicies(row.preferences);
+
   const defaultPreferences: AcademyPreferences = {
     language: 'pt-BR',
     timezone: 'America/Sao_Paulo',
@@ -241,16 +265,8 @@ function rowToAcademy(row: AcademyRow): Academy {
           row.preferences?.accessControl?.blockSecondEntryWithoutExit
           ?? defaultAccessControl.blockSecondEntryWithoutExit,
       },
-      delinquency: {
-        blockAccess:
-          (row.preferences as Record<string, unknown> | null)?.delinquency != null
-            ? Boolean((row.preferences as { delinquency?: DelinquencyPolicy }).delinquency?.blockAccess)
-            : DELINQUENCY_POLICY_DEFAULTS.blockAccess,
-        graceDays:
-          (row.preferences as Record<string, unknown> | null)?.delinquency != null
-            ? Number((row.preferences as { delinquency?: DelinquencyPolicy }).delinquency?.graceDays) || 0
-            : DELINQUENCY_POLICY_DEFAULTS.graceDays,
-      },
+      delinquency: effectivePolicies.delinquency,
+      billing: effectivePolicies.billing,
     },
     status: row.status || 'active',
     createdAt: new Date(row.created_at),
@@ -374,9 +390,31 @@ export async function updateAcademy(
  * Retorna defaults seguros se nada estiver configurado.
  */
 export async function getDelinquencyPolicy(): Promise<DelinquencyPolicy> {
+  const policies = await getBillingPolicies();
+  return policies.delinquency;
+}
+
+export async function getBillingPolicies(): Promise<BillingPolicies> {
   const academy = await getAcademy();
-  if (!academy) return { ...DELINQUENCY_POLICY_DEFAULTS };
-  return academy.preferences.delinquency ?? { ...DELINQUENCY_POLICY_DEFAULTS };
+
+  if (!academy) {
+    return {
+      delinquency: { ...BILLING_POLICIES_DEFAULTS.delinquency },
+      billing: {
+        ...BILLING_POLICIES_DEFAULTS.billing,
+        dueReminder: { ...BILLING_POLICIES_DEFAULTS.billing.dueReminder },
+        overdueNotice: { ...BILLING_POLICIES_DEFAULTS.billing.overdueNotice },
+        preBlock: { ...BILLING_POLICIES_DEFAULTS.billing.preBlock },
+        escalation: { ...BILLING_POLICIES_DEFAULTS.billing.escalation },
+        subscriptionExpiring: { ...BILLING_POLICIES_DEFAULTS.billing.subscriptionExpiring },
+        paymentConfirmed: { ...BILLING_POLICIES_DEFAULTS.billing.paymentConfirmed },
+        regularization: { ...BILLING_POLICIES_DEFAULTS.billing.regularization },
+        reactivation: { ...BILLING_POLICIES_DEFAULTS.billing.reactivation },
+      },
+    };
+  }
+
+  return getEffectiveBillingPolicies(academy.preferences);
 }
 
 /**
@@ -388,35 +426,49 @@ export async function updateDelinquencyPolicy(
   policy: DelinquencyPolicy,
   updatedBy: string
 ): Promise<{ success: boolean; error?: string }> {
-  // Validação forte
-  if (typeof policy.blockAccess !== 'boolean') {
-    return { success: false, error: 'blockAccess deve ser verdadeiro ou falso' };
-  }
   const graceDays = Math.floor(Number(policy.graceDays));
   if (!Number.isFinite(graceDays) || graceDays < 0 || graceDays > 365) {
     return { success: false, error: 'graceDays deve ser um número inteiro entre 0 e 365' };
   }
 
-  // Ler academy atual para merge seguro de preferences
+  const currentPolicies = await getBillingPolicies();
+  const result = await updateBillingPolicies(
+    {
+      ...currentPolicies,
+      delinquency: {
+        blockAccess: policy.blockAccess,
+        graceDays,
+      },
+    },
+    updatedBy,
+  );
+
+  return { success: result.success, error: result.error };
+}
+
+export async function updateBillingPolicies(
+  policies: BillingPolicies,
+  updatedBy: string,
+): Promise<{ success: boolean; academy?: Academy; error?: string }> {
+  const validation = validateBillingPolicies(policies);
+
+  if (!validation.success) {
+    return { success: false, error: validation.error };
+  }
+
   const academy = await getAcademy();
+
   if (!academy) {
     return { success: false, error: 'Academia não encontrada' };
   }
 
   const mergedPreferences: AcademyPreferences = {
     ...academy.preferences,
-    delinquency: {
-      blockAccess: policy.blockAccess,
-      graceDays,
-    },
+    delinquency: validation.policies.delinquency,
+    billing: validation.policies.billing,
   };
 
-  const result = await updateAcademy(
-    { preferences: mergedPreferences },
-    updatedBy
-  );
-
-  return { success: result.success, error: result.error };
+  return updateAcademy({ preferences: mergedPreferences }, updatedBy);
 }
 
 // ============================================================================

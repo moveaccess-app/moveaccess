@@ -18,10 +18,16 @@ export type {
   Address,
   OperatingHour,
   AccessConfig,
+  BillingAutomationPolicy,
+  BillingPolicies,
   DelinquencyPolicy,
 } from './settingsServiceSupabase';
 
-export { DELINQUENCY_POLICY_DEFAULTS } from './settingsServiceSupabase';
+export {
+  BILLING_AUTOMATION_POLICY_DEFAULTS,
+  BILLING_POLICIES_DEFAULTS,
+  DELINQUENCY_POLICY_DEFAULTS,
+} from './settingsServiceSupabase';
 
 function log(...args: unknown[]) {
   if (DEBUG_SETTINGS) {
@@ -81,6 +87,29 @@ export async function getDelinquencyPolicy() {
   return { ...settingsSupabase.DELINQUENCY_POLICY_DEFAULTS };
 }
 
+export async function getBillingPolicies() {
+  log('getBillingPolicies', { useSupabase: USE_SUPABASE_SETTINGS });
+
+  if (USE_SUPABASE_SETTINGS) {
+    return settingsSupabase.getBillingPolicies();
+  }
+
+  return {
+    delinquency: { ...settingsSupabase.BILLING_POLICIES_DEFAULTS.delinquency },
+    billing: {
+      ...settingsSupabase.BILLING_POLICIES_DEFAULTS.billing,
+      dueReminder: { ...settingsSupabase.BILLING_POLICIES_DEFAULTS.billing.dueReminder },
+      overdueNotice: { ...settingsSupabase.BILLING_POLICIES_DEFAULTS.billing.overdueNotice },
+      preBlock: { ...settingsSupabase.BILLING_POLICIES_DEFAULTS.billing.preBlock },
+      escalation: { ...settingsSupabase.BILLING_POLICIES_DEFAULTS.billing.escalation },
+      subscriptionExpiring: { ...settingsSupabase.BILLING_POLICIES_DEFAULTS.billing.subscriptionExpiring },
+      paymentConfirmed: { ...settingsSupabase.BILLING_POLICIES_DEFAULTS.billing.paymentConfirmed },
+      regularization: { ...settingsSupabase.BILLING_POLICIES_DEFAULTS.billing.regularization },
+      reactivation: { ...settingsSupabase.BILLING_POLICIES_DEFAULTS.billing.reactivation },
+    },
+  };
+}
+
 export async function updateDelinquencyPolicy(
   policy: settingsSupabase.DelinquencyPolicy,
   updatedBy: string
@@ -92,6 +121,19 @@ export async function updateDelinquencyPolicy(
   }
 
   // Mock — sem persistência real
+  return { success: true };
+}
+
+export async function updateBillingPolicies(
+  policies: settingsSupabase.BillingPolicies,
+  updatedBy: string,
+) {
+  log('updateBillingPolicies', { useSupabase: USE_SUPABASE_SETTINGS, policies });
+
+  if (USE_SUPABASE_SETTINGS) {
+    return settingsSupabase.updateBillingPolicies(policies, updatedBy);
+  }
+
   return { success: true };
 }
 
