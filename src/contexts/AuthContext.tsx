@@ -43,6 +43,41 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const STAFF_PROTECTED_PREFIXES = [
+  '/home',
+  '/users',
+  '/access',
+  '/plans',
+  '/assinaturas',
+  '/contratos',
+  '/financial',
+  '/settings',
+  '/setup',
+];
+
+const STUDENT_PROTECTED_PREFIXES = ['/aluno', '/cadastro/continuar'];
+const STUDENT_PUBLIC_PATHS = ['/aluno/login'];
+
+function matchesPath(pathname: string, route: string): boolean {
+  if (route === '/') {
+    return pathname === '/';
+  }
+
+  return pathname === route || pathname.startsWith(`${route}/`);
+}
+
+function isStudentProtectedRoute(pathname: string): boolean {
+  if (STUDENT_PUBLIC_PATHS.some((route) => matchesPath(pathname, route))) {
+    return false;
+  }
+
+  return STUDENT_PROTECTED_PREFIXES.some((route) => matchesPath(pathname, route));
+}
+
+function isStaffProtectedRoute(pathname: string): boolean {
+  return STAFF_PROTECTED_PREFIXES.some((route) => matchesPath(pathname, route));
+}
+
 // ============================================
 // PROVIDER
 // ============================================
@@ -79,8 +114,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setCurrentUser(mapSessionToCurrentUser(newSession));
 
       if (!newSession) {
-        const isStudentArea = pathname?.startsWith('/aluno') || pathname?.startsWith('/cadastro');
-        router.push(isStudentArea ? '/aluno/login' : '/login');
+        if (pathname && isStudentProtectedRoute(pathname)) {
+          router.push('/aluno/login');
+        } else if (pathname && isStaffProtectedRoute(pathname)) {
+          router.push('/login');
+        }
       }
     });
 
