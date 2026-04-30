@@ -104,6 +104,29 @@ body {
   padding: 0;
 }
 
+input.ui-input {
+  --input-autofill-bg: var(--background-primary);
+  --input-autofill-text: var(--element-primary);
+}
+
+input.ui-input.ui-input-dark-surface {
+  --input-autofill-bg: #0e1726;
+  --input-autofill-text: #ffffff;
+  background-color: #0e1726;
+}
+
+input.ui-input:-webkit-autofill,
+input.ui-input:-webkit-autofill:hover,
+input.ui-input:-webkit-autofill:focus,
+input.ui-input:-webkit-autofill:active {
+  -webkit-text-fill-color: var(--input-autofill-text) !important;
+  caret-color: var(--input-autofill-text) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--input-autofill-bg) inset !important;
+  box-shadow: 0 0 0 1000px var(--input-autofill-bg) inset !important;
+  transition: background-color 99999s ease-in-out 0s !important;
+  background-color: var(--input-autofill-bg) !important;
+}
+
 /* ========================================
    DESIGN SYSTEM - Estilos Globais de Interatividade
    ======================================== */
@@ -211,6 +234,14 @@ textarea:focus {
   outline: none;
   border-color: var(--status-info);
   box-shadow: 0 0 0 3px var(--status-info-background);
+}
+
+input.ui-input.ui-input-dark-surface:hover,
+input.ui-input.ui-input-dark-surface:focus,
+input.ui-input.ui-input-dark-surface:focus-visible {
+  outline: none;
+  border-color: transparent;
+  box-shadow: none;
 }
 
 /* Desabilitar interatividade */

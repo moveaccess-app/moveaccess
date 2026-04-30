@@ -5,7 +5,8 @@
  * real public signup links for prospective students.
  */
 
-import { getActiveAcademyId } from '@/lib/supabase/academyScope';
+import { createClient } from '@/lib/supabase/client';
+import { getActiveAcademyId, getBrowserAccessToken } from '@/lib/supabase/academyScope';
 
 const API_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const API_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -53,30 +54,14 @@ interface DbInviteLinkRow {
   created_at: string;
 }
 
-function getStorageKey(): string {
-  const projectRef = API_URL?.split('//')[1]?.split('.')[0] || 'supabase';
-  return `sb-${projectRef}-auth-token`;
-}
-
-function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  const stored = localStorage.getItem(getStorageKey());
-  if (!stored) return null;
+async function getCurrentUserId(): Promise<string | null> {
   try {
-    const session = JSON.parse(stored);
-    return session.access_token || null;
-  } catch {
-    return null;
-  }
-}
+    const { data, error } = await createClient().auth.getUser();
+    if (error || !data.user) {
+      return null;
+    }
 
-function getUserId(): string | null {
-  if (typeof window === 'undefined') return null;
-  const stored = localStorage.getItem(getStorageKey());
-  if (!stored) return null;
-  try {
-    const session = JSON.parse(stored);
-    return session.user?.id || null;
+    return data.user.id;
   } catch {
     return null;
   }
@@ -135,8 +120,8 @@ export function buildWhatsAppInviteUrl(phone: string | null | undefined, message
 export async function createInviteLink(
   input: CreateInviteLinkInput
 ): Promise<{ success: boolean; invite?: InviteLink; error?: string }> {
-  const token = getAccessToken();
-  const userId = getUserId();
+  const token = await getBrowserAccessToken();
+  const userId = await getCurrentUserId();
   const academyId = await getActiveAcademyId();
 
   if (!token || !userId || !academyId || !API_URL || !API_KEY) {

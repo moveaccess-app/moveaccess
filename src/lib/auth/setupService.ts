@@ -5,22 +5,10 @@
  * Uses existing services for data operations and direct fetch for setup tracking.
  */
 
-import { getActiveAcademyId } from '@/lib/supabase/academyScope';
+import { getActiveAcademyId, getBrowserAccessToken } from '@/lib/supabase/academyScope';
 
 const API_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const API_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  const projectRef = API_URL?.split('//')[1]?.split('.')[0] || 'supabase';
-  const stored = localStorage.getItem(`sb-${projectRef}-auth-token`);
-  if (!stored) return null;
-  try {
-    return JSON.parse(stored).access_token || null;
-  } catch {
-    return null;
-  }
-}
 
 export interface SetupState {
   academyId: string;
@@ -40,11 +28,17 @@ export interface SetupState {
   plansCount: number;
 }
 
+export interface SetupPlanInput {
+  name: string;
+  price: number;
+  billingCycle: 'monthly' | 'yearly' | 'custom';
+}
+
 /**
  * Fetch current setup state: academy data, default unit, plans count
  */
 export async function getSetupState(): Promise<SetupState | null> {
-  const token = getAccessToken();
+  const token = await getBrowserAccessToken();
   const academyId = await getActiveAcademyId();
   if (!token || !academyId || !API_URL || !API_KEY) return null;
 
@@ -99,7 +93,7 @@ export async function updateAcademySetup(data: {
   cnpj?: string;
   address?: Record<string, string>;
 }): Promise<{ success: boolean; error?: string }> {
-  const token = getAccessToken();
+  const token = await getBrowserAccessToken();
   const academyId = await getActiveAcademyId();
   if (!token || !academyId) return { success: false, error: 'Sessão inválida' };
 
@@ -134,10 +128,9 @@ export async function updateUnitSetup(
   unitId: string,
   data: { name: string; address?: Record<string, string> }
 ): Promise<{ success: boolean; error?: string }> {
-  const token = getAccessToken();
-  if (!token) return { success: false, error: 'Sessão inválida' };
-
+  const token = await getBrowserAccessToken();
   const academyId = await getActiveAcademyId();
+  if (!token || !academyId) return { success: false, error: 'Sessão inválida' };
 
   const payload: Record<string, unknown> = { name: data.name };
   if (data.address) payload.address = data.address;
@@ -174,7 +167,7 @@ export async function updateUnitSetup(
  * Save billing choice (step 3)
  */
 export async function saveBillingStep(): Promise<{ success: boolean; error?: string }> {
-  const token = getAccessToken();
+  const token = await getBrowserAccessToken();
   const academyId = await getActiveAcademyId();
   if (!token || !academyId) return { success: false, error: 'Sessão inválida' };
 
@@ -194,26 +187,26 @@ export async function saveBillingStep(): Promise<{ success: boolean; error?: str
 }
 
 /**
- * Create plan from template (step 4)
+ * Create one or more starter plans (step 4)
  */
-export async function createPlanSetup(data: {
-  name: string;
-  price: number;
-  billingCycle: 'monthly' | 'yearly' | 'custom';
-}): Promise<{ success: boolean; error?: string }> {
-  const token = getAccessToken();
+export async function createPlansSetup(plans: SetupPlanInput[]): Promise<{ success: boolean; error?: string }> {
+  const token = await getBrowserAccessToken();
   const academyId = await getActiveAcademyId();
   if (!token || !academyId) return { success: false, error: 'Sessão inválida' };
 
-  const payload = {
+  if (plans.length === 0) {
+    return { success: false, error: 'Nenhum plano informado' };
+  }
+
+  const payload = plans.map((plan) => ({
     academy_id: academyId,
-    name: data.name,
+    name: plan.name,
     description: '',
-    price: data.price,
-    billing_cycle: data.billingCycle,
+    price: plan.price,
+    billing_cycle: plan.billingCycle,
     status: 'active',
     access_rules: {},
-  };
+  }));
 
   const res = await fetch(`${API_URL}/rest/v1/plans?select=id`, {
     method: 'POST',
@@ -243,11 +236,15 @@ export async function createPlanSetup(data: {
   return { success: true };
 }
 
+export async function createPlanSetup(data: SetupPlanInput): Promise<{ success: boolean; error?: string }> {
+  return createPlansSetup([data]);
+}
+
 /**
  * Skip plan step
  */
 export async function skipPlanStep(): Promise<{ success: boolean; error?: string }> {
-  const token = getAccessToken();
+  const token = await getBrowserAccessToken();
   const academyId = await getActiveAcademyId();
   if (!token || !academyId) return { success: false, error: 'Sessão inválida' };
 
@@ -269,7 +266,7 @@ export async function skipPlanStep(): Promise<{ success: boolean; error?: string
  * Complete setup (step 5 — final)
  */
 export async function completeSetup(): Promise<{ success: boolean; error?: string }> {
-  const token = getAccessToken();
+  const token = await getBrowserAccessToken();
   const academyId = await getActiveAcademyId();
   if (!token || !academyId) return { success: false, error: 'Sessão inválida' };
 

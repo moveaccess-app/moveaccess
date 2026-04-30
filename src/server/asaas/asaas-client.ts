@@ -9,6 +9,7 @@ import type {
   AsaasCustomerCreateRequest,
   AsaasCustomerUpdateRequest,
   AsaasCustomerResponse,
+  AsaasPaymentBillingInfoResponse,
   AsaasPaymentCreateRequest,
   AsaasPaymentResponse,
   AsaasSubscriptionCreateRequest,
@@ -71,6 +72,10 @@ export class AsaasClient {
 
   async getPayment(id: string): Promise<AsaasPaymentResponse> {
     return this.request<AsaasPaymentResponse>('GET', `/v3/payments/${encodeURIComponent(id)}`);
+  }
+
+  async getPaymentBillingInfo(id: string): Promise<AsaasPaymentBillingInfoResponse> {
+    return this.request<AsaasPaymentBillingInfoResponse>('GET', `/v3/payments/${encodeURIComponent(id)}/billingInfo`);
   }
 
   // ─── Subscription endpoints ──────────────────────────────────

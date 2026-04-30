@@ -5,6 +5,8 @@ import { Button, Card } from '@/components/ui';
 import { OnboardingSession } from '@/lib/users';
 import { cn } from '@/lib/utils';
 import { resolveVariables, buildContextFromOnboarding } from '@/lib/contracts';
+import { BILLING_CYCLE_LABELS } from '@/lib/plans/publicPlansService';
+import { getAcademy, getUnits, type Unit } from '@/lib/settings/settingsServiceSupabase';
 
 interface ContractTemplateData {
   id: string;
@@ -19,6 +21,59 @@ interface StepContractProps {
   session: OnboardingSession;
   onNext: (data: OnboardingSession['collectedData']['contract']) => void;
   onBack: () => void;
+}
+
+interface ContractRenderContext {
+  academyName: string;
+  academyCnpj: string;
+  unitName: string;
+  unitAddress: string;
+}
+
+interface AddressLike {
+  street?: string;
+  number?: string;
+  complement?: string;
+  neighborhood?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+}
+
+const DEFAULT_RENDER_CONTEXT: ContractRenderContext = {
+  academyName: 'Academia',
+  academyCnpj: 'não informado',
+  unitName: 'Unidade da academia',
+  unitAddress: 'Endereço da unidade não informado',
+};
+
+function formatCnpj(value?: string | null): string {
+  const digits = value?.replace(/\D/g, '') || '';
+
+  if (digits.length !== 14) {
+    return value?.trim() || '';
+  }
+
+  return digits.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+}
+
+function formatAddress(address?: AddressLike | null): string {
+  if (!address) return '';
+
+  const streetLine = [address.street, address.number].filter(Boolean).join(', ');
+  const districtLine = [address.complement, address.neighborhood].filter(Boolean).join(' • ');
+  const cityLine = [address.city, address.state].filter(Boolean).join(' - ');
+  const zipLine = address.zipCode?.trim() || '';
+
+  return [streetLine, districtLine, cityLine, zipLine].filter(Boolean).join(' | ');
+}
+
+function resolveUnitContext(units: Unit[], unitId: string | null): Unit | null {
+  if (unitId) {
+    return units.find((unit) => unit.id === unitId) || null;
+  }
+
+  return units.length === 1 ? units[0] : null;
 }
 
 // Fallback text used only when no template is configured for the academy
@@ -69,6 +124,7 @@ export function StepContract({ session, onNext, onBack }: StepContractProps) {
   const [template, setTemplate] = useState<ContractTemplateData | null>(null);
   const [templateLoading, setTemplateLoading] = useState(true);
   const [templateError, setTemplateError] = useState<string | null>(null);
+  const [renderContext, setRenderContext] = useState<ContractRenderContext>(DEFAULT_RENDER_CONTEXT);
 
   useEffect(() => {
     async function loadTemplate() {
@@ -105,21 +161,60 @@ export function StepContract({ session, onNext, onBack }: StepContractProps) {
     loadTemplate();
   }, [session.academyId]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRenderContext() {
+      try {
+        const [academy, units] = await Promise.all([getAcademy(), getUnits()]);
+
+        if (cancelled) return;
+
+        const selectedUnit = resolveUnitContext(units, session.unitId);
+
+        setRenderContext({
+          academyName: academy?.tradeName?.trim() || academy?.legalName?.trim() || DEFAULT_RENDER_CONTEXT.academyName,
+          academyCnpj: formatCnpj(academy?.cnpj) || DEFAULT_RENDER_CONTEXT.academyCnpj,
+          unitName: selectedUnit?.name?.trim() || DEFAULT_RENDER_CONTEXT.unitName,
+          unitAddress: formatAddress(selectedUnit?.address) || DEFAULT_RENDER_CONTEXT.unitAddress,
+        });
+      } catch {
+        if (!cancelled) {
+          setRenderContext(DEFAULT_RENDER_CONTEXT);
+        }
+      }
+    }
+
+    void loadRenderContext();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session.academyId, session.unitId]);
+
   const userName = session.collectedData.identification?.fullName || 'Usuário';
   const planName = session.collectedData.planSelection?.planName || 'Plano';
   const planValue = session.collectedData.planSelection?.value || 0;
+  const planPeriod = session.collectedData.planSelection?.billingType;
+  const planPeriodLabel = (planPeriod && BILLING_CYCLE_LABELS[planPeriod]) || planPeriod || 'período não informado';
+  const studentCpf = session.collectedData.personalData?.document?.trim() || 'não informado';
+  const studentEmail = session.collectedData.identification?.email?.trim() || 'não informado';
 
   const contractContent = template?.content || FALLBACK_CONTRACT_TEXT;
 
   // Build context from onboarding session data to resolve variables
   const variableContext = useMemo(() => buildContextFromOnboarding({
-    studentName: userName !== 'Usuário' ? userName : undefined,
-    studentCpf: session.collectedData.personalData?.document,
-    studentEmail: session.collectedData.identification?.email,
-    planName: planName !== 'Plano' ? planName : undefined,
-    planValue: planValue || undefined,
-    planPeriod: session.collectedData.planSelection?.billingType,
-  }), [userName, planName, planValue, session]);
+    studentName: userName !== 'Usuário' ? userName : 'Aluno',
+    studentCpf,
+    studentEmail,
+    planName: planName !== 'Plano' ? planName : 'Plano selecionado',
+    planValue,
+    planPeriod: planPeriodLabel,
+    academyName: renderContext.academyName,
+    academyCnpj: renderContext.academyCnpj,
+    unitName: renderContext.unitName,
+    unitAddress: renderContext.unitAddress,
+  }), [planPeriodLabel, planName, planValue, renderContext, studentCpf, studentEmail, userName]);
 
   // Resolve variables in contract content
   const resolvedContent = useMemo(

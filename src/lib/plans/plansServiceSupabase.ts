@@ -1,4 +1,4 @@
-import { getActiveAcademyId } from '@/lib/supabase/academyScope';
+import { getActiveAcademyId, getBrowserAccessToken } from '@/lib/supabase/academyScope';
 
 export type PlanBillingCycle = 'monthly' | 'yearly' | 'custom';
 export type PlanStatus = 'active' | 'inactive';
@@ -63,30 +63,11 @@ export const PLAN_BILLING_CYCLE_LABELS: Record<PlanBillingCycle, string> = {
   custom: 'Personalizado',
 };
 
-function getStorageKey(): string {
-  const projectRef = API_URL?.split('//')[1]?.split('.')[0] || 'supabase';
-  return `sb-${projectRef}-auth-token`;
-}
-
-function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-
-  const stored = localStorage.getItem(getStorageKey());
-  if (!stored) return null;
-
-  try {
-    const session = JSON.parse(stored);
-    return session.access_token || null;
-  } catch {
-    return null;
-  }
-}
-
 async function fetchSupabase<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<{ data: T | null; error: string | null }> {
-  const token = getAccessToken();
+  const token = await getBrowserAccessToken();
 
   if (!token || !API_URL || !API_KEY) {
     return { data: null, error: 'Não autenticado' };

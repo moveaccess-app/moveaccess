@@ -68,7 +68,7 @@ export default function StaffLoginPage() {
   };
 
   return (
-    <AuthPageLayout backHref="/" brandSubtitle="Painel administrativo da equipe">
+    <AuthPageLayout backHref="/">
       <AuthCard>
         <AuthEyebrow>Staff Login</AuthEyebrow>
         <AuthHeading
@@ -175,7 +175,7 @@ export default function StaffLoginPage() {
 
       <p className="mt-8 text-center text-base text-slate-300">
         É aluno?{' '}
-        <Link href="/aluno/login" className="font-semibold text-cyan-400 hover:text-cyan-300">
+        <Link href="/aluno/login" className="font-semibold text-cyan-400 no-underline hover:text-cyan-300 hover:no-underline">
           Acesse sua área aqui
         </Link>
       </p>

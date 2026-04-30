@@ -235,7 +235,7 @@ export function HeroSection() {
               <Link
                 href="/signup"
                 onClick={() => capture('cta_clicked', { location: 'hero', button_text: 'Começar agora' })}
-                className="inline-flex items-center justify-center px-6 py-3.5 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 text-sm font-semibold text-white shadow-lg shadow-cyan-500/25 hover:shadow-xl hover:shadow-cyan-500/30 hover:-translate-y-0.5 transition-all"
+                className="inline-flex items-center justify-center px-6 py-3.5 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 text-sm font-semibold text-white no-underline shadow-lg shadow-cyan-500/25 transition-all hover:-translate-y-0.5 hover:text-white hover:no-underline hover:shadow-xl hover:shadow-cyan-500/30"
               >
                 Começar agora
                 <svg className="w-4 h-4 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">

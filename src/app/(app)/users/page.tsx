@@ -3,82 +3,108 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Header } from '@/components/common/Header';
-import { Input, Select, Button, Card, SkeletonTable } from '@/components/ui';
+import { Input, Select, Button, Card, SkeletonTable, Badge } from '@/components/ui';
 import { usersContent } from '@/data/usersContent';
 import { 
   searchAndFilterUsers,
   type UserStatus, 
   type User,
-} from '@/lib/users';
+} from '@/lib/users/usersServiceSupabase';
 import { InviteGenerator } from '@/components/onboarding/InviteGenerator';
 
 const ITEMS_PER_PAGE = 20;
 
-// ============================================
-// FUNÇÕES DE ESTADO COMPOSTO
-// ============================================
+function getUnitLabel(user: User): string {
+  return user.unitName || 'Sem unidade';
+}
 
-type CompositeStatus = {
+type OperationalSummary = {
   label: string;
-  severity: 'default' | 'warning' | 'error';
+  detail: string;
+  tone: User['operationalStatus']['access']['tone'];
 };
 
-function getCompositeStatus(user: User): CompositeStatus {
-  // Prioridade: estados críticos primeiro
-  if (user.status === 'suspended') {
-    return { label: 'Suspenso', severity: 'error' };
+const operationalBadgeToneClass: Record<OperationalSummary['tone'], string> = {
+  success: 'border-[var(--status-positive)]/40 bg-transparent text-[var(--status-positive)]',
+  warning: 'border-[var(--status-alert)]/50 bg-transparent text-[var(--element-primary)]',
+  destructive: 'border-[var(--status-negative)]/45 bg-transparent text-[var(--status-negative)]',
+  secondary: 'border-[var(--divider-primary)] bg-transparent text-[var(--element-secondary)]',
+};
+
+function getOperationalSummary(user: User): OperationalSummary {
+  const { registration, financial, access } = user.operationalStatus;
+
+  if (registration.tone === 'destructive') {
+    return {
+      label: registration.label,
+      detail: 'Cadastro impede a operação',
+      tone: registration.tone,
+    };
   }
-  
-  if (user.status === 'blocked') {
-    return { label: 'Bloqueado', severity: 'error' };
+
+  if (access.tone === 'destructive') {
+    return {
+      label: access.label,
+      detail: access.label === 'Bloqueado por financeiro' ? 'Acesso bloqueado por cobrança' : 'Acesso não liberado',
+      tone: access.tone,
+    };
   }
-  
-  if (user.status === 'pending') {
-    return { label: 'Pendente', severity: 'warning' };
+
+  if (financial.tone === 'destructive') {
+    return {
+      label: financial.label,
+      detail: 'Financeiro precisa de ação',
+      tone: financial.tone,
+    };
   }
-  
-  if (user.status === 'inactive') {
-    return { label: 'Inativo', severity: 'warning' };
+
+  if (registration.tone === 'warning') {
+    return {
+      label: registration.label,
+      detail: 'Cadastro ainda não concluído',
+      tone: registration.tone,
+    };
   }
-  
-  // Usuário ativo - verificar condições
-  if (user.financial.status === 'overdue' && user.financial.daysOverdue > 30) {
-    return { label: 'Ativo · Bloqueado (Financeiro)', severity: 'error' };
+
+  if (financial.code !== 'current') {
+    return {
+      label: financial.label,
+      detail: financial.code === 'no_charge' ? 'Sem cobrança registrada' : 'Cobrança em acompanhamento',
+      tone: financial.tone === 'secondary' ? 'warning' : financial.tone,
+    };
   }
-  
-  if (user.financial.status === 'overdue') {
-    return { label: 'Ativo · Em atraso', severity: 'warning' };
+
+  if (access.code !== 'released') {
+    return {
+      label: access.label,
+      detail: 'Acesso ainda não liberado',
+      tone: access.tone,
+    };
   }
-  
-  const currentContract = user.contracts.find(c => c.id === user.currentContractId);
-  if (currentContract?.status === 'expired' || currentContract?.status === 'cancelled') {
-    return { label: 'Ativo · Bloqueado (Contrato)', severity: 'error' };
-  }
-  
-  if (!user.access.isAllowed) {
-    return { label: 'Ativo · Bloqueado', severity: 'error' };
-  }
-  
-  return { label: 'Ativo · Em dia', severity: 'default' };
+
+  return {
+    label: 'Pronto para check-in',
+    detail: 'Cadastro, cobrança e acesso ok',
+    tone: 'success',
+  };
 }
 
-function getLastCheckInText(user: User): string {
-  if (!user.access.lastCheckIn) return 'Nunca';
-  
-  const lastCheckIn = new Date(user.access.lastCheckIn.checkInAt);
-  const now = new Date();
-  const diffMs = now.getTime() - lastCheckIn.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  
-  if (diffDays === 0) return 'Hoje';
-  if (diffDays === 1) return 'Ontem';
-  return '7+ dias';
-}
+function OperationalStatusCell({ user }: { user: User }) {
+  const summary = getOperationalSummary(user);
 
-function hasActiveContract(user: User): boolean {
-  if (!user.currentContractId) return false;
-  const contract = user.contracts.find(c => c.id === user.currentContractId);
-  return contract?.status === 'active';
+  return (
+    <div className="flex min-w-0 flex-col items-start gap-0.5">
+      <Badge
+        variant="outline"
+        className={`w-fit max-w-full truncate px-2 py-0 text-[10px] font-medium leading-5 ${operationalBadgeToneClass[summary.tone]}`}
+      >
+        {summary.label}
+      </Badge>
+      <span className="max-w-[220px] truncate text-[11px] leading-4 text-[var(--element-secondary)]">
+        {summary.detail}
+      </span>
+    </div>
+  );
 }
 
 // ============================================
@@ -91,16 +117,7 @@ interface UserRowProps {
 }
 
 function UserRow({ user, onClick }: UserRowProps) {
-  const compositeStatus = getCompositeStatus(user);
-  const lastCheckIn = getLastCheckInText(user);
-  const hasContract = hasActiveContract(user);
-
-  // Cor do status baseada na severidade
-  const statusColor = {
-    default: 'var(--element-primary)',
-    warning: 'var(--status-alert)',
-    error: 'var(--status-negative)',
-  }[compositeStatus.severity];
+  const unitLabel = getUnitLabel(user);
 
   return (
     <tr
@@ -128,27 +145,25 @@ function UserRow({ user, onClick }: UserRowProps) {
 
       {/* Coluna 2: Situação */}
       <td className="py-3 px-4">
-        <span className="text-sm" style={{ color: statusColor }}>
-          {compositeStatus.label}
-        </span>
+        <OperationalStatusCell user={user} />
       </td>
 
       {/* Coluna 3: Plano / Contrato */}
       <td className="py-3 px-4">
         <div className="flex flex-col">
           <span className="text-sm" style={{ color: 'var(--element-primary)' }}>
-            {user.currentPlan?.name || '—'}
+            {user.currentPlan?.name || 'Sem plano'}
           </span>
           <span className="text-xs" style={{ color: 'var(--element-secondary)' }}>
-            {hasContract ? 'Contrato vigente' : 'Sem contrato'}
+            {user.currentPlan ? 'Plano vinculado' : 'Nenhum plano vinculado'}
           </span>
         </div>
       </td>
 
-      {/* Coluna 4: Atividade */}
+      {/* Coluna 4: Unidade */}
       <td className="py-3 px-4">
         <span className="text-sm" style={{ color: 'var(--element-primary)' }}>
-          {lastCheckIn}
+          {unitLabel}
         </span>
       </td>
     </tr>
@@ -292,7 +307,7 @@ export default function UsersPage() {
                   className="text-left py-2.5 px-4 text-xs font-medium uppercase tracking-wide"
                   style={{ color: 'var(--element-secondary)' }}
                 >
-                  Situação
+                  Situação operacional
                 </th>
                 <th 
                   className="text-left py-2.5 px-4 text-xs font-medium uppercase tracking-wide"
@@ -304,7 +319,7 @@ export default function UsersPage() {
                   className="text-left py-2.5 px-4 text-xs font-medium uppercase tracking-wide"
                   style={{ color: 'var(--element-secondary)' }}
                 >
-                  Último acesso
+                  Unidade
                 </th>
               </tr>
             </thead>

@@ -8,13 +8,15 @@ import { cn } from "@/lib/utils";
 
 export type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
 
+export const darkSurfaceInputClassName = "ui-input-dark-surface rounded-[inherit] border-0 bg-[#0e1726] px-0 py-0 text-base text-white shadow-none placeholder:text-slate-500 hover:border-0 focus:border-0 focus:ring-0";
+
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, type, ...props }, ref) => {
     return (
       <input
         type={type}
         className={cn(
-          "flex h-10 w-full rounded-md border px-3 py-2 text-sm",
+          "ui-input flex h-10 w-full rounded-md border px-3 py-2 text-sm",
           "bg-[var(--background-primary)] border-[var(--divider-primary)]",
           "text-[var(--element-primary)] placeholder:text-[var(--element-disabled)]",
           "transition-all duration-200",

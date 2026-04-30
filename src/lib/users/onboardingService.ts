@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/client';
+import { getActiveAcademyId, getBrowserAccessToken } from '@/lib/supabase/academyScope';
 import {
   buildStepState,
   type OnboardingCollectedData,
@@ -32,8 +33,11 @@ interface FinalizeDraftResult {
   success: boolean;
   draft_id?: string;
   user_id?: string;
+  email?: string;
+  full_name?: string;
   already_published?: boolean;
   error?: string;
+  error_code?: string;
   activation?: {
     activated: boolean;
     already_existed?: boolean;
@@ -49,30 +53,34 @@ interface FinalizeDraftResult {
 const API_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const API_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-function getStorageKey(): string {
-  const projectRef = API_URL?.split('//')[1]?.split('.')[0] || 'supabase';
-  return `sb-${projectRef}-auth-token`;
-}
+function getFinalizeDraftErrorMessage(error?: string, errorCode?: string): string {
+  const normalized = errorCode || error || '';
 
-function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-
-  const stored = localStorage.getItem(getStorageKey());
-  if (!stored) return null;
-
-  try {
-    const session = JSON.parse(stored);
-    return session.access_token || null;
-  } catch {
-    return null;
+  switch (normalized) {
+    case 'DUPLICATE_CPF_CURRENT_ACADEMY':
+      return 'Este CPF já está cadastrado nesta academia.';
+    case 'DUPLICATE_CPF_DIFFERENT_ACCOUNT':
+      return 'Este CPF já está vinculado a outro cadastro. Use o mesmo e-mail do aluno ou ajuste o cadastro existente antes de concluir.';
+    case 'DUPLICATE_CPF_NON_STUDENT_PROFILE':
+      return 'Este CPF já está vinculado a outro tipo de conta. Revise o cadastro antes de concluir.';
+    case 'MISSING_REQUIRED_FIELDS':
+      return 'Preencha os dados obrigatórios do aluno antes de concluir o cadastro.';
+    default:
+      break;
   }
+
+  if (normalized.includes('idx_profiles_cpf') || normalized.includes('profiles_cpf_unique')) {
+    return 'Este CPF já está cadastrado. Revise o aluno existente antes de concluir.';
+  }
+
+  return error || 'Falha ao publicar onboarding';
 }
 
 async function fetchRest<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<{ data: T | null; error: string | null }> {
-  const token = getAccessToken();
+  const token = await getBrowserAccessToken();
 
   if (!token || !API_URL || !API_KEY) {
     return { data: null, error: 'Não autenticado' };
@@ -113,7 +121,7 @@ async function fetchRpc<T>(
   rpcName: string,
   payload: Record<string, unknown>
 ): Promise<{ data: T | null; error: string | null }> {
-  const token = getAccessToken();
+  const token = await getBrowserAccessToken();
 
   if (!token || !API_URL || !API_KEY) {
     return { data: null, error: 'Não autenticado' };
@@ -172,19 +180,15 @@ async function getStaffContext(): Promise<StaffContext> {
     throw new Error('Usuário não autenticado');
   }
 
-  const { data: memberships, error: membershipError } = await fetchRest<
-    Array<{ academy_id: string; is_primary: boolean }>
-  >(
-    `academy_memberships?profile_id=eq.${userData.user.id}&select=academy_id,is_primary&order=is_primary.desc&limit=1`
-  );
+  const academyId = await getActiveAcademyId();
 
-  if (membershipError || !memberships || memberships.length === 0) {
+  if (!academyId) {
     throw new Error('Não foi possível identificar a academia do usuário');
   }
 
   return {
     userId: userData.user.id,
-    academyId: memberships[0].academy_id,
+    academyId,
   };
 }
 
@@ -276,11 +280,11 @@ export async function finalizeOnboardingDraft(draftId: string): Promise<Finalize
   });
 
   if (error || !data) {
-    throw new Error(error || 'Falha ao publicar onboarding');
+    throw new Error(getFinalizeDraftErrorMessage(error));
   }
 
   if (!data.success) {
-    throw new Error(data.error || 'Falha ao publicar onboarding');
+    throw new Error(getFinalizeDraftErrorMessage(data.error, data.error_code));
   }
 
   return data;
@@ -302,8 +306,15 @@ export interface ExternalBillingResult {
   asaasSubscriptionId?: string;
   asaasChargeId?: string;
   asaasPaymentId?: string;
+  paymentLink?: string | null;
   invoiceUrl?: string | null;
   bankSlipUrl?: string | null;
+  bankSlipIdentificationField?: string | null;
+  bankSlipBarCode?: string | null;
+  bankSlipNossoNumero?: string | null;
+  pixCopyPaste?: string | null;
+  pixQrCodeImage?: string | null;
+  pixQrCodeExpirationDate?: string | null;
   environment?: string;
 }
 
@@ -332,6 +343,33 @@ export async function activateExternalBilling(
       status: 'failed_external_billing',
       billingPath: null,
       reason: 'NETWORK_ERROR',
+    };
+  }
+}
+
+export async function reconcileExternalCharge(
+  chargeId: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch('/api/asaas/charges/reconcile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chargeId }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: errorData.error || `API_ERROR_${response.status}`,
+      };
+    }
+
+    return { success: true };
+  } catch {
+    return {
+      success: false,
+      error: 'NETWORK_ERROR',
     };
   }
 }

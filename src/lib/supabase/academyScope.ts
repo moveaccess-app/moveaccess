@@ -32,7 +32,7 @@ function getStorageKey(): string {
   return `sb-${projectRef}-auth-token`;
 }
 
-async function getAccessToken(): Promise<string | null> {
+export async function getBrowserAccessToken(): Promise<string | null> {
   if (typeof window === 'undefined') return null;
 
   try {
@@ -83,7 +83,7 @@ interface MyProfileRow {
  * Returns null if the user is not authenticated or has no academy.
  */
 export async function getActiveAcademyId(): Promise<string | null> {
-  const token = await getAccessToken();
+  const token = await getBrowserAccessToken();
 
   if (!token || !API_URL || !API_KEY) {
     return null;

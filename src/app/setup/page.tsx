@@ -9,7 +9,7 @@ import {
   updateAcademySetup,
   updateUnitSetup,
   saveBillingStep,
-  createPlanSetup,
+  createPlansSetup,
   skipPlanStep,
   completeSetup,
   type SetupState,
@@ -42,7 +42,7 @@ const STEPS: StepDef[] = [
   { id: 'academy', label: 'Academia', icon: Building2 },
   { id: 'unit', label: 'Unidade', icon: MapPin },
   { id: 'billing', label: 'Cobrança', icon: CreditCard },
-  { id: 'plan', label: 'Plano', icon: Calendar },
+  { id: 'plan', label: 'Planos', icon: Calendar },
   { id: 'review', label: 'Revisão', icon: CheckCircle },
 ];
 
@@ -75,6 +75,8 @@ interface PlanForm {
   price: string;
   billingCycle: 'monthly' | 'yearly' | 'custom';
 }
+
+type PlanSetupMode = 'templates' | 'custom';
 
 // ============================================================================
 // HELPERS
@@ -119,9 +121,30 @@ function parseCurrency(formatted: string): number {
 // ============================================================================
 
 const PLAN_TEMPLATES = [
-  { name: 'Plano Mensal', price: '149,90', billingCycle: 'monthly' as const, popular: true },
-  { name: 'Plano Trimestral', price: '399,90', billingCycle: 'custom' as const, popular: false },
-  { name: 'Plano Anual', price: '1.199,90', billingCycle: 'yearly' as const, popular: false },
+  {
+    id: 'monthly',
+    name: 'Plano Mensal',
+    price: '149,90',
+    billingCycle: 'monthly' as const,
+    popular: true,
+    helper: 'Para alunos com cobrança recorrente mês a mês.',
+  },
+  {
+    id: 'quarterly',
+    name: 'Plano Trimestral',
+    price: '399,90',
+    billingCycle: 'custom' as const,
+    popular: false,
+    helper: 'Boa opção para pacotes com compromisso de 3 meses.',
+  },
+  {
+    id: 'yearly',
+    name: 'Plano Anual',
+    price: '1.199,90',
+    billingCycle: 'yearly' as const,
+    popular: false,
+    helper: 'Ideal para alunos com pagamento antecipado anual.',
+  },
 ];
 
 // ============================================================================
@@ -204,7 +227,7 @@ function StepAcademy({
           Dados da sua academia
         </h2>
         <p className="text-sm mt-1" style={{ color: 'var(--element-secondary)' }}>
-          Informações básicas para identificar sua academia no sistema
+          Comece com os dados principais da academia. Você pode complementar ou ajustar depois.
         </p>
       </div>
 
@@ -328,7 +351,7 @@ function StepUnit({
           Unidade principal
         </h2>
         <p className="text-sm mt-1" style={{ color: 'var(--element-secondary)' }}>
-          Configure sua primeira unidade. Você pode criar mais unidades depois.
+          Cadastre a unidade que vai começar a operar no piloto. Você pode adicionar outras depois.
         </p>
       </div>
 
@@ -397,10 +420,10 @@ function StepBilling({
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-bold" style={{ color: 'var(--element-primary)' }}>
-          Configuração de cobrança
+          Como sua academia vai cobrar os alunos
         </h2>
         <p className="text-sm mt-1" style={{ color: 'var(--element-secondary)' }}>
-          O MoveAccess integra com o Asaas para cobranças automáticas via PIX, boleto e cartão.
+          Defina se você vai começar com cobrança manual ou preparar a integração com o Asaas para automatizar recebimentos.
         </p>
       </div>
 
@@ -486,81 +509,146 @@ function StepBilling({
 }
 
 function StepPlan({
+  mode,
+  onModeChange,
+  selectedTemplateIds,
+  onToggleTemplate,
   form,
   onChange,
-  hasPlans,
+  plansCount,
 }: {
+  mode: PlanSetupMode;
+  onModeChange: (mode: PlanSetupMode) => void;
+  selectedTemplateIds: string[];
+  onToggleTemplate: (templateId: string) => void;
   form: PlanForm;
   onChange: (f: PlanForm) => void;
-  hasPlans: boolean;
+  plansCount: number;
 }) {
-  const [useTemplate, setUseTemplate] = useState(true);
-
-  function selectTemplate(t: typeof PLAN_TEMPLATES[0]) {
-    onChange({ name: t.name, price: t.price, billingCycle: t.billingCycle });
-    setUseTemplate(true);
-  }
+  const selectedCount = selectedTemplateIds.length;
+  const hasExistingPlans = plansCount > 0;
 
   return (
     <div className="space-y-5">
       <div>
         <h2 className="text-xl font-bold" style={{ color: 'var(--element-primary)' }}>
-          Crie seu primeiro plano
+          Escolha os planos da sua academia
         </h2>
         <p className="text-sm mt-1" style={{ color: 'var(--element-secondary)' }}>
-          {hasPlans
-            ? 'Você já tem planos criados. Pode pular este passo ou criar mais um.'
-            : 'Escolha um modelo ou personalize. Você pode criar mais planos depois.'}
+          {hasExistingPlans
+            ? 'Sua academia já tem planos ativos. Se quiser, adicione mais opções iniciais para oferecer aos alunos.'
+            : 'Escolha os planos iniciais que sua academia deseja oferecer aos alunos. Você pode começar com mais de um agora e ajustar depois.'}
         </p>
       </div>
 
-      {/* Templates */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {PLAN_TEMPLATES.map((t) => (
-          <button
-            key={t.name}
-            type="button"
-            onClick={() => selectTemplate(t)}
-            className="relative p-4 rounded-xl border-2 text-center transition-all"
-            style={{
-              borderColor: form.name === t.name ? 'var(--status-info)' : 'var(--divider-primary)',
-              backgroundColor: form.name === t.name ? 'var(--status-info-background, rgba(59,130,246,0.08))' : 'transparent',
-            }}
-          >
-            {t.popular && (
-              <span
-                className="absolute -top-2.5 left-1/2 -translate-x-1/2 text-[10px] font-bold px-2 py-0.5 rounded-full"
-                style={{ backgroundColor: 'var(--status-positive)', color: 'var(--background-primary)' }}
-              >
-                Popular
-              </span>
-            )}
-            <p className="font-semibold text-sm" style={{ color: 'var(--element-primary)' }}>
-              {t.name}
-            </p>
-            <p className="text-lg font-bold mt-1" style={{ color: 'var(--element-primary)' }}>
-              R$ {t.price}
-            </p>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--element-secondary)' }}>
-              {t.billingCycle === 'monthly' ? '/mês' : t.billingCycle === 'yearly' ? '/ano' : '/trimestre'}
-            </p>
-          </button>
-        ))}
+      <div
+        className="rounded-xl border p-4 text-sm"
+        style={{
+          borderColor: 'var(--divider-primary)',
+          backgroundColor: 'var(--background-tertiary)',
+          color: 'var(--element-secondary)',
+        }}
+      >
+        <p className="font-semibold mb-1" style={{ color: 'var(--element-primary)' }}>
+          Importante
+        </p>
+        <p>
+          Estes são os planos que sua academia vai oferecer aos alunos. Não é a cobrança do MoveAccess.
+        </p>
       </div>
 
-      {/* Custom form */}
+      {mode === 'templates' && (
+        <>
+          <div>
+            <p className="text-sm font-semibold" style={{ color: 'var(--element-primary)' }}>
+              Modelos iniciais para seus alunos
+            </p>
+            <p className="text-xs mt-1" style={{ color: 'var(--element-secondary)' }}>
+              Selecione um ou mais modelos. O preço exibido é o valor que sua academia cobrará do aluno.
+            </p>
+            <p className="text-xs mt-2 font-medium" style={{ color: 'var(--element-secondary)' }}>
+              {selectedCount > 0
+                ? `${selectedCount} modelo(s) selecionado(s)`
+                : 'Nenhum modelo selecionado ainda'}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {PLAN_TEMPLATES.map((t) => {
+              const isSelected = selectedTemplateIds.includes(t.id);
+
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => onToggleTemplate(t.id)}
+                  className="relative rounded-xl border-2 p-4 text-left transition-all"
+                  style={{
+                    borderColor: isSelected ? 'var(--status-info)' : 'var(--divider-primary)',
+                    backgroundColor: isSelected ? 'var(--status-info-background, rgba(59,130,246,0.08))' : 'transparent',
+                  }}
+                  aria-pressed={isSelected}
+                >
+                  {t.popular && (
+                    <span
+                      className="absolute -top-2.5 left-4 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                      style={{ backgroundColor: 'var(--status-positive)', color: 'var(--background-primary)' }}
+                    >
+                      Popular
+                    </span>
+                  )}
+
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-sm" style={{ color: 'var(--element-primary)' }}>
+                        {t.name}
+                      </p>
+                      <p className="text-lg font-bold mt-1" style={{ color: 'var(--element-primary)' }}>
+                        R$ {t.price}
+                      </p>
+                    </div>
+                    <div
+                      className="w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0"
+                      style={{
+                        borderColor: isSelected ? 'var(--status-info)' : 'var(--divider-primary)',
+                        backgroundColor: isSelected ? 'var(--status-info)' : 'transparent',
+                        color: 'var(--background-primary)',
+                      }}
+                    >
+                      {isSelected && <CheckCircle className="w-4 h-4" />}
+                    </div>
+                  </div>
+
+                  <p className="text-xs mt-2 font-medium" style={{ color: 'var(--element-primary)' }}>
+                    Cobrado do aluno · {t.billingCycle === 'monthly' ? 'mensal' : t.billingCycle === 'yearly' ? 'anual' : 'trimestral'}
+                  </p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--element-secondary)' }}>
+                    {t.helper}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+
       <div>
         <button
           type="button"
-          onClick={() => setUseTemplate(!useTemplate)}
+          onClick={() => onModeChange(mode === 'templates' ? 'custom' : 'templates')}
           className="text-xs font-medium underline"
           style={{ color: 'var(--element-secondary)' }}
         >
-          {useTemplate ? 'Personalizar valores' : 'Usar modelo'}
+          {mode === 'templates' ? 'Criar um plano personalizado em vez de usar modelos' : 'Voltar para modelos prontos'}
         </button>
 
-        {!useTemplate && (
+        {mode === 'custom' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+            <div className="sm:col-span-2">
+              <p className="text-xs" style={{ color: 'var(--element-secondary)' }}>
+                Crie um plano inicial personalizado para oferecer aos seus alunos.
+              </p>
+            </div>
             <div className="sm:col-span-2 space-y-1.5">
               <Label htmlFor="p-name" className="text-xs">Nome do plano</Label>
               <Input id="p-name" value={form.name} onChange={(e) => onChange({ ...form, name: e.target.value })} className="h-10" />
@@ -603,15 +691,13 @@ function StepPlan({
 function StepReview({
   academy,
   unit,
-  plan,
+  planSummary,
   billing,
-  plansCount,
 }: {
   academy: AcademyForm;
   unit: UnitForm;
-  plan: PlanForm;
+  planSummary: { value: string; detail: string; done: boolean };
   billing: 'now' | 'later' | null;
-  plansCount: number;
 }) {
   const items = [
     {
@@ -636,11 +722,11 @@ function StepReview({
       done: true,
     },
     {
-      label: 'Plano',
-      value: plan.name || (plansCount > 0 ? `${plansCount} plano(s) existente(s)` : 'Nenhum plano criado'),
-      detail: plan.name ? `R$ ${plan.price}` : 'Você pode criar planos depois',
+      label: 'Planos',
+      value: planSummary.value,
+      detail: planSummary.detail,
       icon: Calendar,
-      done: !!plan.name || plansCount > 0,
+      done: planSummary.done,
     },
   ];
 
@@ -651,7 +737,7 @@ function StepReview({
           Tudo pronto!
         </h2>
         <p className="text-sm mt-1" style={{ color: 'var(--element-secondary)' }}>
-          Confira os dados e entre no sistema para começar a operar.
+          Revise o essencial para começar a operar. Você pode ajustar esses dados depois no painel.
         </p>
       </div>
 
@@ -719,6 +805,8 @@ export default function SetupWizardPage() {
     street: '', number: '', neighborhood: '', city: '', state: '', zipCode: '',
   });
   const [billingChoice, setBillingChoice] = useState<'now' | 'later' | null>(null);
+  const [planMode, setPlanMode] = useState<PlanSetupMode>('templates');
+  const [selectedPlanTemplateIds, setSelectedPlanTemplateIds] = useState<string[]>([]);
   const [planForm, setPlanForm] = useState<PlanForm>({
     name: '', price: '', billingCycle: 'monthly',
   });
@@ -802,6 +890,12 @@ export default function SetupWizardPage() {
     if (currentStep === 2) {
       if (!billingChoice) return 'Selecione uma opção de cobrança';
     }
+    if (currentStep === 3 && planMode === 'custom') {
+      const hasAnyCustomValue = !!planForm.name.trim() || !!planForm.price.trim();
+      if (hasAnyCustomValue && (!planForm.name.trim() || !planForm.price.trim())) {
+        return 'Preencha nome e valor do plano personalizado ou volte para os modelos prontos';
+      }
+    }
     return null;
   }
 
@@ -855,17 +949,42 @@ export default function SetupWizardPage() {
         case 2:
           result = await saveBillingStep();
           break;
-        case 3:
-          if (planForm.name && planForm.price) {
-            result = await createPlanSetup({
-              name: planForm.name.trim(),
-              price: parseCurrency(planForm.price),
-              billingCycle: planForm.billingCycle,
-            });
+        case 3: {
+          const plansToCreate =
+            planMode === 'templates'
+              ? PLAN_TEMPLATES.filter((template) => selectedPlanTemplateIds.includes(template.id)).map((template) => ({
+                  name: template.name,
+                  price: parseCurrency(template.price),
+                  billingCycle: template.billingCycle,
+                }))
+              : planForm.name.trim() && planForm.price
+              ? [
+                  {
+                    name: planForm.name.trim(),
+                    price: parseCurrency(planForm.price),
+                    billingCycle: planForm.billingCycle,
+                  },
+                ]
+              : [];
+
+          if (plansToCreate.length > 0) {
+            result = await createPlansSetup(plansToCreate);
+
+            if (result.success) {
+              setSetupState((prev) =>
+                prev
+                  ? { ...prev, plansCount: prev.plansCount + plansToCreate.length }
+                  : prev
+              );
+              setSelectedPlanTemplateIds([]);
+              setPlanMode('templates');
+              setPlanForm({ name: '', price: '', billingCycle: 'monthly' });
+            }
           } else {
             result = await skipPlanStep();
           }
           break;
+        }
         default:
           result = { success: true };
       }
@@ -931,10 +1050,54 @@ export default function SetupWizardPage() {
     setIsSaving(false);
     if (result.success) {
       capture('setup_step_skipped', { step_number: 4, step_name: 'plan' });
+      setSelectedPlanTemplateIds([]);
+      setPlanMode('templates');
       setPlanForm({ name: '', price: '', billingCycle: 'monthly' });
       setCurrentStep(4);
     }
   }
+
+  const planTemplatesSelected = PLAN_TEMPLATES.filter((template) => selectedPlanTemplateIds.includes(template.id));
+  const planSummary = (() => {
+    if (planTemplatesSelected.length > 0) {
+      return {
+        value: `${planTemplatesSelected.length} plano(s) inicial(is) selecionado(s)`,
+        detail: planTemplatesSelected.map((template) => template.name).join(' · '),
+        done: true,
+      };
+    }
+
+    if (planForm.name.trim() && planForm.price) {
+      return {
+        value: planForm.name.trim(),
+        detail: `R$ ${planForm.price} · Plano da academia para os alunos`,
+        done: true,
+      };
+    }
+
+    const existingPlans = setupState?.plansCount || 0;
+    if (existingPlans > 0) {
+      return {
+        value: `${existingPlans} plano(s) cadastrado(s)`,
+        detail: 'Você pode editar ou criar mais planos depois no painel',
+        done: true,
+      };
+    }
+
+    return {
+      value: 'Nenhum plano criado',
+      detail: 'Você pode configurar os planos da academia depois',
+      done: false,
+    };
+  })();
+
+  const nextButtonLabel = (() => {
+    if (currentStep === STEPS.length - 1) return 'Entrar no sistema';
+    if (currentStep !== 3) return 'Próximo';
+    if (planMode === 'templates' && selectedPlanTemplateIds.length > 0) return 'Salvar planos e continuar';
+    if (planMode === 'custom' && planForm.name.trim() && planForm.price) return 'Salvar plano e continuar';
+    return 'Continuar sem criar planos';
+  })();
 
   // Loading
   if (authLoading || isLoading) {
@@ -983,14 +1146,29 @@ export default function SetupWizardPage() {
             {currentStep === 0 && <StepAcademy form={academyForm} onChange={setAcademyForm} />}
             {currentStep === 1 && <StepUnit form={unitForm} onChange={setUnitForm} academyAddress={academyForm} />}
             {currentStep === 2 && <StepBilling choice={billingChoice} onChoose={setBillingChoice} />}
-            {currentStep === 3 && <StepPlan form={planForm} onChange={setPlanForm} hasPlans={(setupState?.plansCount || 0) > 0} />}
+            {currentStep === 3 && (
+              <StepPlan
+                mode={planMode}
+                onModeChange={setPlanMode}
+                selectedTemplateIds={selectedPlanTemplateIds}
+                onToggleTemplate={(templateId) => {
+                  setSelectedPlanTemplateIds((current) =>
+                    current.includes(templateId)
+                      ? current.filter((id) => id !== templateId)
+                      : [...current, templateId]
+                  );
+                }}
+                form={planForm}
+                onChange={setPlanForm}
+                plansCount={setupState?.plansCount || 0}
+              />
+            )}
             {currentStep === 4 && (
               <StepReview
                 academy={academyForm}
                 unit={unitForm}
-                plan={planForm}
+                planSummary={planSummary}
                 billing={billingChoice}
-                plansCount={setupState?.plansCount || 0}
               />
             )}
 
@@ -1049,7 +1227,7 @@ export default function SetupWizardPage() {
                       </>
                     ) : (
                       <>
-                        Entrar no sistema
+                        {nextButtonLabel}
                         <ChevronRight className="w-4 h-4" />
                       </>
                     )}
@@ -1064,11 +1242,11 @@ export default function SetupWizardPage() {
                     {isSaving ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        Salvando...
+                        {currentStep === 3 ? 'Salvando planos...' : 'Salvando...'}
                       </>
                     ) : (
                       <>
-                        Próximo
+                        {nextButtonLabel}
                         <ChevronRight className="w-4 h-4" />
                       </>
                     )}

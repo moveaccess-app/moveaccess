@@ -11,7 +11,7 @@ export interface AuthorizedStaff {
   academyId: string;
 }
 
-export async function requireStaffForAcademy(academyId: string): Promise<AuthorizedStaff> {
+async function requireAuthenticatedStaffUser() {
   const supabase = await createServerSupabaseClient();
 
   const { data: { user }, error: authError } = await supabase.auth.getUser();
@@ -19,10 +19,50 @@ export async function requireStaffForAcademy(academyId: string): Promise<Authori
     throw new AuthorizationError('Usuário não autenticado.');
   }
 
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('user_type')
+    .eq('id', user.id)
+    .single();
+
+  if (profileError || !profile || profile.user_type !== 'staff') {
+    throw new AuthorizationError('Apenas staff pode executar esta operação.');
+  }
+
+  return { supabase, userId: user.id };
+}
+
+export async function requireStaffSession(): Promise<AuthorizedStaff> {
+  const { supabase, userId } = await requireAuthenticatedStaffUser();
+
+  const { data: memberships, error: membershipError } = await supabase
+    .from('academy_memberships')
+    .select('academy_id, is_primary, created_at')
+    .eq('profile_id', userId)
+    .order('is_primary', { ascending: false })
+    .order('created_at', { ascending: true })
+    .limit(1);
+
+  if (membershipError) {
+    throw new AuthorizationError(`Erro ao verificar academia do staff: ${membershipError.message}`);
+  }
+
+  const academyId = memberships?.[0]?.academy_id;
+
+  if (!academyId) {
+    throw new AuthorizationError('Staff autenticado sem academia vinculada.');
+  }
+
+  return { userId, academyId };
+}
+
+export async function requireStaffForAcademy(academyId: string): Promise<AuthorizedStaff> {
+  const { supabase, userId } = await requireAuthenticatedStaffUser();
+
   const { data: membership, error: membershipError } = await supabase
     .from('academy_memberships')
     .select('profile_id')
-    .eq('profile_id', user.id)
+    .eq('profile_id', userId)
     .eq('academy_id', academyId)
     .maybeSingle();
 
@@ -34,18 +74,7 @@ export async function requireStaffForAcademy(academyId: string): Promise<Authori
     throw new AuthorizationError('Usuário não pertence a esta academia.');
   }
 
-  // Confirm user_type is staff
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('user_type')
-    .eq('id', user.id)
-    .single();
-
-  if (profileError || !profile || profile.user_type !== 'staff') {
-    throw new AuthorizationError('Apenas staff pode executar esta operação.');
-  }
-
-  return { userId: user.id, academyId };
+  return { userId, academyId };
 }
 
 export class AuthorizationError extends Error {

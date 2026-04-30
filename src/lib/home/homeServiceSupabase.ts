@@ -50,14 +50,20 @@ export interface ActivationChecklist {
   hasPlan: boolean;
   hasPublishedContract: boolean;
   hasStudent: boolean;
+  hasSubscription: boolean;
+  hasCharge: boolean;
   hasCheckin: boolean;
   hasPayment: boolean;
   hasBilling: boolean;
+  hasCommandCenterCase: boolean;
   plansCount: number;
   studentsCount: number;
+  subscriptionsCount: number;
   contractsCount: number;
+  chargesCount: number;
   checkinsCount: number;
   paymentsCount: number;
+  commandCenterCaseCount: number;
 }
 
 export interface DashboardKpis {
@@ -81,9 +87,12 @@ export interface HomeData {
   accessPlaceholder: string;
 }
 
+import { getBrowserAccessToken } from '@/lib/supabase/academyScope';
+
 interface HomeOverviewRpc {
   success: boolean;
   error_code?: string;
+  academy_id?: string | null;
   academy_name?: string | null;
   setup_completed?: boolean;
   kpis?: {
@@ -98,12 +107,16 @@ interface HomeOverviewRpc {
     has_plan?: boolean;
     has_published_contract?: boolean;
     has_student?: boolean;
+    has_subscription?: boolean;
+    has_charge?: boolean;
     has_checkin?: boolean;
     has_payment?: boolean;
     has_billing?: boolean;
     plans_count?: number;
     students_count?: number;
+    subscriptions_count?: number;
     contracts_count?: number;
+    charges_count?: number;
     checkins_count?: number;
     payments_count?: number;
   };
@@ -130,23 +143,10 @@ interface HomeOverviewRpc {
 const API_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const API_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-function getStorageKey(): string {
-  const projectRef = API_URL?.split('//')[1]?.split('.')[0] || 'supabase';
-  return `sb-${projectRef}-auth-token`;
-}
-
-function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-
-  const stored = localStorage.getItem(getStorageKey());
-  if (!stored) return null;
-
-  try {
-    const session = JSON.parse(stored);
-    return session.access_token || null;
-  } catch {
-    return null;
-  }
+interface CommandCenterApiResponse {
+  summary?: {
+    caseCount?: number;
+  };
 }
 
 function fallbackData(): HomeData {
@@ -196,14 +196,20 @@ function fallbackData(): HomeData {
       hasPlan: false,
       hasPublishedContract: false,
       hasStudent: false,
+      hasSubscription: false,
+      hasCharge: false,
       hasCheckin: false,
       hasPayment: false,
       hasBilling: false,
+      hasCommandCenterCase: false,
       plansCount: 0,
       studentsCount: 0,
+      subscriptionsCount: 0,
       contractsCount: 0,
+      chargesCount: 0,
       checkinsCount: 0,
       paymentsCount: 0,
+      commandCenterCaseCount: 0,
     },
     dashboard: {
       pendingPayments: 0,
@@ -216,8 +222,32 @@ function fallbackData(): HomeData {
   };
 }
 
+async function getCommandCenterCaseCount(
+  academyId: string | null | undefined,
+  hasCharge: boolean,
+): Promise<number> {
+  if (!academyId || !hasCharge) {
+    return 0;
+  }
+
+  try {
+    const response = await fetch(
+      `/api/financial/command-center?academyId=${encodeURIComponent(academyId)}`,
+    );
+
+    if (!response.ok) {
+      return 0;
+    }
+
+    const data = (await response.json()) as CommandCenterApiResponse;
+    return data.summary?.caseCount ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 async function callOverviewRpc(): Promise<HomeOverviewRpc | null> {
-  const token = getAccessToken();
+  const token = await getBrowserAccessToken();
 
   if (!token || !API_URL || !API_KEY) {
     return null;
@@ -260,22 +290,37 @@ export async function getHomeData(): Promise<HomeData> {
   };
 
   const act = rpc.activation;
+  const dash = rpc.dashboard;
+  const paidPaymentsCount = act?.payments_count ?? 0;
+  const pendingPaymentsCount = dash?.pending_payments ?? 0;
+  const chargesCount = act?.charges_count ?? (pendingPaymentsCount + paidPaymentsCount);
+  const hasCharge = typeof act?.has_charge === 'boolean' ? act.has_charge : chargesCount > 0;
+  const subscriptionsCount = act?.subscriptions_count ?? (hasCharge ? 1 : 0);
+  const hasSubscription = typeof act?.has_subscription === 'boolean'
+    ? act.has_subscription
+    : subscriptionsCount > 0;
+  const commandCenterCaseCount = await getCommandCenterCaseCount(rpc.academy_id, hasCharge);
   const activation: ActivationChecklist = {
     hasUnit: act?.has_unit ?? false,
     hasPlan: act?.has_plan ?? false,
     hasPublishedContract: act?.has_published_contract ?? false,
     hasStudent: act?.has_student ?? false,
+    hasSubscription,
+    hasCharge,
     hasCheckin: act?.has_checkin ?? false,
     hasPayment: act?.has_payment ?? false,
     hasBilling: act?.has_billing ?? false,
+    hasCommandCenterCase: commandCenterCaseCount > 0,
     plansCount: act?.plans_count ?? 0,
     studentsCount: act?.students_count ?? 0,
+    subscriptionsCount,
     contractsCount: act?.contracts_count ?? 0,
+    chargesCount,
     checkinsCount: act?.checkins_count ?? 0,
-    paymentsCount: act?.payments_count ?? 0,
+    paymentsCount: paidPaymentsCount,
+    commandCenterCaseCount,
   };
 
-  const dash = rpc.dashboard;
   const dashboard: DashboardKpis = {
     pendingPayments: dash?.pending_payments ?? 0,
     monthRevenue: dash?.month_revenue ?? 0,

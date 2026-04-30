@@ -40,7 +40,7 @@ function PlanCard({
     <Card
       onClick={onSelect}
       className={cn(
-        'relative cursor-pointer transition-all p-6',
+        'relative h-full min-w-0 cursor-pointer overflow-hidden p-6 transition-all',
         isSelected
           ? 'ring-2 ring-[var(--element-primary)] border-[var(--element-primary)]'
           : 'hover:border-[var(--border-hover)]'
@@ -52,21 +52,21 @@ function PlanCard({
         </div>
       )}
 
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-lg font-semibold text-[var(--text-primary)]">
+      <div className="space-y-4 min-w-0">
+        <div className="min-w-0 space-y-1">
+          <h3 className="break-words text-lg font-semibold text-[var(--text-primary)]">
             {plan.name}
           </h3>
           {plan.description && (
-            <p className="text-sm text-[var(--text-secondary)]">
+            <p className="break-words text-sm text-[var(--text-secondary)]">
               {plan.description}
             </p>
           )}
         </div>
 
         <div className="space-y-1">
-          <div className="flex items-baseline gap-1">
-            <span className="text-3xl font-bold text-[var(--text-primary)]">
+          <div className="flex flex-wrap items-baseline gap-x-1 gap-y-1">
+            <span className="break-words text-3xl font-bold text-[var(--text-primary)]">
               {formatPrice(plan.price)}
             </span>
             <span className="text-sm text-[var(--text-tertiary)]">
@@ -156,7 +156,7 @@ export function StepPlanSelection({ session, onNext, onBack }: StepPlanSelection
           </p>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {plans.map((plan) => (
             <PlanCard
               key={plan.id}
@@ -177,14 +177,14 @@ export function StepPlanSelection({ session, onNext, onBack }: StepPlanSelection
 
       {selectedPlanData && (
         <Card className="p-4 bg-[var(--background-secondary)] border-none">
-          <div className="flex items-center justify-between">
-            <div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
               <p className="text-sm text-[var(--text-tertiary)]">Plano selecionado</p>
-              <p className="font-semibold text-[var(--text-primary)]">
+              <p className="break-words font-semibold text-[var(--text-primary)]">
                 {selectedPlanData.name} — {BILLING_CYCLE_LABELS[selectedPlanData.billingCycle] || selectedPlanData.billingCycle}
               </p>
             </div>
-            <div className="text-right">
+            <div className="text-left sm:text-right">
               <p className="text-xl font-bold text-[var(--element-primary)]">
                 {formatPrice(selectedPlanData.price)}
               </p>

@@ -49,30 +49,46 @@ const BILLING_TYPE_TO_METHOD: Record<string, string> = {
   UNDEFINED: 'manual',
 };
 
+const BILLING_TIME_ZONE_OFFSET = '-03:00';
+
 function toLocalMethod(billingType: string): string {
   return BILLING_TYPE_TO_METHOD[billingType] ?? 'manual';
 }
 
 // ─── Due date formatting ─────────────────────────────────────────
 
-function toTimestamptz(dateStr: string): string {
-  // Asaas sends dates as YYYY-MM-DD. Convert to ISO timestamp for
-  // the payments.due_date column (timestamptz).
+function formatDateInBillingTimeZone(date: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function normalizeBillingDueDate(dateStr: string): string {
+  const today = formatDateInBillingTimeZone(new Date());
+
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    return `${dateStr}T00:00:00.000Z`;
+    return dateStr < today ? today : dateStr;
   }
-  return dateStr;
+
+  const parsed = new Date(dateStr);
+  if (isNaN(parsed.getTime())) {
+    return today;
+  }
+
+  const localDate = formatDateInBillingTimeZone(parsed);
+  return localDate < today ? today : localDate;
+}
+
+function toTimestamptz(dateStr: string): string {
+  const dateOnly = normalizeBillingDueDate(dateStr);
+  return `${dateOnly}T23:59:59.000${BILLING_TIME_ZONE_OFFSET}`;
 }
 
 function toDateOnly(dateStr: string): string {
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    return dateStr;
-  }
-  const d = new Date(dateStr);
-  if (isNaN(d.getTime())) {
-    return dateStr;
-  }
-  return d.toISOString().split('T')[0];
+  return normalizeBillingDueDate(dateStr);
 }
 
 // ─── Lookup subscription link ────────────────────────────────────

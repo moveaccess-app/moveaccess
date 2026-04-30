@@ -1,18 +1,11 @@
 /**
  * Integrations Service — bridges Asaas account data with Settings UI.
  *
- * Uses the real asaasAccountService (Supabase REST) for all CRUD,
+ * Uses the /api/asaas/account route for academy-scoped persistence/state,
  * and the /api/asaas/test-connection route for connection validation.
  */
 
-import {
-  getAsaasAccounts,
-  getAsaasAccountById,
-  createAsaasAccount,
-  updateAsaasAccount,
-  type AsaasAccount,
-  type AsaasEnvironment,
-} from '@/lib/asaas';
+import type { AsaasAccount, AsaasEnvironment } from '@/lib/asaas';
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -49,12 +42,35 @@ export interface SaveAsaasConfigInput {
   walletId?: string | null;
 }
 
+interface GetAsaasConnectionStateResponse {
+  success: true;
+  academyId: string;
+  state: AsaasConnectionState;
+}
+
+interface SaveAsaasConfigResponse {
+  success: boolean;
+  academyId?: string;
+  environment?: AsaasEnvironment;
+  accountId?: string;
+  error?: string;
+}
+
+interface DisconnectAsaasResponse {
+  success: boolean;
+  academyId?: string;
+  error?: string;
+}
+
 // ─── Connection State ────────────────────────────────────────────
 
 export async function getAsaasConnectionState(): Promise<AsaasConnectionState> {
-  const accounts = await getAsaasAccounts({ includeInactive: true });
+  const response = await fetch('/api/asaas/account', {
+    method: 'GET',
+    cache: 'no-store',
+  });
 
-  if (accounts.length === 0) {
+  if (!response.ok) {
     return {
       status: 'not_configured',
       account: null,
@@ -63,18 +79,8 @@ export async function getAsaasConnectionState(): Promise<AsaasConnectionState> {
     };
   }
 
-  // Pick the primary (academy-level, active) account
-  const active = accounts.find((a) => a.status === 'active' && !a.unitId);
-  const account = active || accounts[0];
-
-  const hasApiKey = Boolean(account.apiKeyReference);
-
-  return {
-    status: account.status === 'active' && hasApiKey ? 'connected' : 'error',
-    account,
-    environment: account.environment,
-    hasApiKey,
-  };
+  const result = (await response.json()) as GetAsaasConnectionStateResponse;
+  return result.state;
 }
 
 // ─── Test Connection ─────────────────────────────────────────────
@@ -97,42 +103,48 @@ export async function testAsaasConnection(
 export async function saveAsaasConfig(
   input: SaveAsaasConfigInput,
   existingAccountId?: string
-): Promise<{ success: boolean; error?: string }> {
-  if (existingAccountId) {
-    const result = await updateAsaasAccount(existingAccountId, {
-      apiKeyReference: input.apiKey,
+): Promise<SaveAsaasConfigResponse> {
+  const response = await fetch('/api/asaas/account', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      accountId: existingAccountId,
+      environment: input.environment,
+      apiKey: input.apiKey,
       accountName: input.accountName,
-      asaasAccountId: input.asaasAccountId,
-      walletId: input.walletId,
-      status: 'active',
-    });
-    return { success: result.success, error: result.error };
+      asaasAccountId: input.asaasAccountId ?? null,
+      walletId: input.walletId ?? null,
+    }),
+  });
+
+  const result = (await response.json()) as SaveAsaasConfigResponse | { error?: string };
+
+  if (!response.ok) {
+    return { success: false, error: result.error || 'Não foi possível salvar a conta Asaas.' };
   }
 
-  const result = await createAsaasAccount({
-    environment: input.environment,
-    apiKeyReference: input.apiKey,
-    accountName: input.accountName,
-    asaasAccountId: input.asaasAccountId,
-    walletId: input.walletId,
-    status: 'active',
-  });
-  return { success: result.success, error: result.error };
+  return result as SaveAsaasConfigResponse;
 }
 
 // ─── Disconnect ──────────────────────────────────────────────────
 
 export async function disconnectAsaas(
   accountId: string
-): Promise<{ success: boolean; error?: string }> {
-  const result = await updateAsaasAccount(accountId, {
-    status: 'inactive',
-    apiKeyReference: null,
+): Promise<DisconnectAsaasResponse> {
+  const response = await fetch('/api/asaas/account', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accountId }),
   });
-  return { success: result.success, error: result.error };
+
+  const result = (await response.json()) as DisconnectAsaasResponse | { error?: string };
+
+  if (!response.ok) {
+    return { success: false, error: result.error || 'Não foi possível desconectar a conta Asaas.' };
+  }
+
+  return result as DisconnectAsaasResponse;
 }
 
 // ─── Re-exports for convenience ──────────────────────────────────
-
-export { getAsaasAccountById };
 export type { AsaasAccount, AsaasEnvironment };

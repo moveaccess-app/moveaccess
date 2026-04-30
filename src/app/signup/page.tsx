@@ -21,7 +21,7 @@ import { Building2, Lock, Mail, Phone, User } from 'lucide-react';
 
 export default function SignupPage() {
   const router = useRouter();
-  const { isAuthenticated, isStaff, isLoading: authLoading } = useAuth();
+  const { currentUser, isAuthenticated, isStaff, isLoading: authLoading, loginAsStaff, refreshSession } = useAuth();
 
   const [ownerName, setOwnerName] = useState('');
   const [academyName, setAcademyName] = useState('');
@@ -36,9 +36,9 @@ export default function SignupPage() {
   // Redirect if already authenticated
   useEffect(() => {
     if (!authLoading && isAuthenticated && isStaff) {
-      router.push('/home');
+      router.push(currentUser?.tenancy.setupCompleted === false ? '/setup' : '/home');
     }
-  }, [authLoading, isAuthenticated, isStaff, router]);
+  }, [authLoading, currentUser, isAuthenticated, isStaff, router]);
 
   // Track page view
   useEffect(() => {
@@ -86,7 +86,7 @@ export default function SignupPage() {
     setIsLoading(true);
 
     try {
-      const result = await signupAcademy({
+      const signupResult = await signupAcademy({
         ownerName: ownerName.trim(),
         academyName: academyName.trim(),
         email: email.trim().toLowerCase(),
@@ -94,13 +94,22 @@ export default function SignupPage() {
         phone: phone.replace(/\D/g, '') || undefined,
       });
 
-      if (result.success) {
+      if (signupResult.success) {
+        const loginResult = await loginAsStaff(email.trim().toLowerCase(), password);
+
+        if (!loginResult.success) {
+          const autoLoginError = loginResult.error || 'Conta criada, mas o login automático falhou';
+          capture('signup_failed', { error: `auto_login_failed:${autoLoginError}`, source: 'signup_page' });
+          setError('Conta criada, mas não foi possível entrar automaticamente. Faça login manualmente.');
+          return;
+        }
+
+        await refreshSession();
         capture('signup_success', { academy_name: academyName.trim(), source: 'signup_page' });
-        // Force auth refresh then redirect to setup wizard
         router.push('/setup');
         router.refresh();
       } else {
-        const errorMsg = result.error || 'Erro ao criar conta';
+        const errorMsg = signupResult.error || 'Erro ao criar conta';
         capture('signup_failed', { error: errorMsg, source: 'signup_page' });
         setError(errorMsg);
       }
@@ -113,7 +122,7 @@ export default function SignupPage() {
   };
 
   return (
-    <AuthPageLayout backHref="/login" brandSubtitle="Cadastre sua academia e configure em 5 minutos">
+    <AuthPageLayout backHref="/login">
       <AuthCard>
         <AuthEyebrow>Cadastro</AuthEyebrow>
         <AuthHeading
@@ -296,7 +305,7 @@ export default function SignupPage() {
 
         <p className="mt-7 text-center text-base text-slate-500">
           Já tem uma conta?{' '}
-          <Link href="/login" className="font-semibold text-cyan-600 hover:text-cyan-500">
+          <Link href="/login" className="font-semibold text-cyan-600 no-underline hover:text-cyan-500 hover:no-underline">
             Fazer login
           </Link>
         </p>

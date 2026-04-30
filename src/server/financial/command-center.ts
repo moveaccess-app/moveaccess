@@ -8,6 +8,7 @@ import type {
   CommandCenterSyncIssue,
 } from '@/lib/payments/commandCenter';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
+import { createServerSupabaseClient } from '@/lib/supabase/server';
 import {
   runFinancialHealthCheck,
   type FinancialHealthCheckResult,
@@ -662,11 +663,12 @@ async function loadContext(
   academyId: string,
   options?: { paymentIds?: string[] },
 ): Promise<CommandCenterContext> {
-  const supabase = createAdminSupabaseClient();
+  const staffSupabase = await createServerSupabaseClient();
+  const adminSupabase = createAdminSupabaseClient();
   const lookbackDate = new Date(Date.now() - LOOKBACK_WINDOW_DAYS * 24 * 60 * 60 * 1000)
     .toISOString();
 
-  const paymentsQuery = supabase
+  const paymentsQuery = staffSupabase
     .from('financial_charges_view')
     .select(
       'id, academy_id, subscription_id, student_id, amount, currency, status, method, reference, due_date, paid_at, created_at, student_name, student_email, student_document, student_registration_id, student_status, plan_name, subscription_status, asaas_charge_id, asaas_payment_id, asaas_status, invoice_url, bank_slip_url, charge_origin, is_asaas_managed, is_recurring',
@@ -692,32 +694,32 @@ async function loadContext(
     health,
   ] = await Promise.all([
     paymentsRequest,
-    supabase
+    staffSupabase
       .from('student_delinquency_view')
       .select('student_id, academy_id, overdue_count, overdue_total, oldest_overdue_date, days_delinquent')
       .eq('academy_id', academyId),
-    supabase
+    adminSupabase
       .from('automation_actions')
       .select('id, academy_id, student_id, entity_type, entity_id, trigger_type, stage, status, channel, resolved_at, resolved_reason, executed_at, error_message, created_at, payload')
       .eq('academy_id', academyId)
       .gte('created_at', lookbackDate)
       .order('created_at', { ascending: false }),
-    supabase
+    adminSupabase
       .from('notification_logs')
       .select('id, academy_id, type, channel, recipient_email, recipient_id, entity_type, entity_id, status, provider_id, error, metadata, created_at')
       .eq('academy_id', academyId)
       .gte('created_at', lookbackDate)
       .order('created_at', { ascending: false }),
-    supabase
+    adminSupabase
       .from('academies')
       .select('trade_name')
       .eq('id', academyId)
       .maybeSingle(),
-    findDueReminderCandidates(supabase),
-    findOverdueCandidates(supabase),
-    findEscalationCandidates(supabase),
-    findPreBlockCandidates(supabase),
-    findRegularizationCandidates(supabase),
+    findDueReminderCandidates(adminSupabase),
+    findOverdueCandidates(adminSupabase),
+    findEscalationCandidates(adminSupabase),
+    findPreBlockCandidates(adminSupabase),
+    findRegularizationCandidates(adminSupabase),
     runFinancialHealthCheck(academyId),
   ]);
 
@@ -749,7 +751,7 @@ async function loadContext(
   const studentIds = [...new Set(payments.map((payment) => payment.student_id))];
 
   const unitAssignmentsResult = studentIds.length > 0
-    ? await supabase
+    ? await adminSupabase
         .from('student_unit_assignments')
         .select('student_id, is_primary, units(name)')
         .in('student_id', studentIds)

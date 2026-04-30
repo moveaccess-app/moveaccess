@@ -16,7 +16,6 @@ import {
   type PriorityAlert,
   type AccessHistoryEntry,
   type ActivationChecklist,
-  type DashboardKpis,
   type HomeData,
 } from '@/lib/home/homeService';
 
@@ -172,98 +171,176 @@ function HomeSkeleton() {
 
 interface ChecklistItem {
   id: string;
-  label: string;
+  title: string;
+  description: string;
   done: boolean;
   cta: string;
   href: string;
   icon: React.ReactNode;
-  emptyHint: string;
+  statusLabel?: string;
 }
 
-function getChecklistItems(activation: ActivationChecklist): ChecklistItem[] {
+interface ChecklistSection {
+  id: string;
+  title: string;
+  items: ChecklistItem[];
+}
+
+function formatChecklistCount(count: number, singular: string, plural: string): string {
+  return count === 1 ? `1 ${singular}` : `${count} ${plural}`;
+}
+
+function getChecklistSections(activation: ActivationChecklist): ChecklistSection[] {
   return [
     {
-      id: 'unit',
-      label: 'Unidade principal criada',
-      done: activation.hasUnit,
-      cta: 'Configurar unidade',
-      href: '/settings/units',
-      icon: icons.mapPin,
-      emptyHint: 'Crie sua primeira unidade para liberar check-ins',
+      id: 'setup',
+      title: 'Preparar matrícula',
+      items: [
+        {
+          id: 'billing',
+          title: 'Configurar cobrança',
+          description: 'Conecte o Asaas para gerar cobranças e receber pagamentos.',
+          done: activation.hasBilling,
+          cta: 'Configurar Asaas',
+          href: '/settings/integrations',
+          icon: icons.creditCard,
+          statusLabel: activation.hasBilling ? 'Asaas conectado para cobrar alunos' : undefined,
+        },
+        {
+          id: 'plan',
+          title: 'Criar planos para alunos',
+          description: 'Cadastre os planos que sua academia vai oferecer aos alunos.',
+          done: activation.hasPlan,
+          cta: 'Ver planos',
+          href: '/plans',
+          icon: icons.calendar,
+          statusLabel: activation.hasPlan
+            ? activation.plansCount === 1
+              ? 'Primeiro plano pronto para matrícula'
+              : formatChecklistCount(activation.plansCount, 'plano pronto para matrícula', 'planos prontos para matrícula')
+            : undefined,
+        },
+        {
+          id: 'contract',
+          title: 'Publicar contrato',
+          description: 'Publique o termo que será aceito na matrícula.',
+          done: activation.hasPublishedContract,
+          cta: 'Criar contrato',
+          href: '/contratos/novo',
+          icon: icons.document,
+          statusLabel: activation.hasPublishedContract
+            ? activation.contractsCount === 1
+              ? 'Contrato pronto para matrícula'
+              : formatChecklistCount(activation.contractsCount, 'contrato publicado', 'contratos publicados')
+            : undefined,
+        },
+        {
+          id: 'student',
+          title: 'Cadastrar primeiro aluno',
+          description: 'Crie ou convide o primeiro aluno para iniciar a operação.',
+          done: activation.hasStudent,
+          cta: 'Cadastrar aluno',
+          href: '/users/onboarding',
+          icon: icons.userPlus,
+          statusLabel: activation.hasStudent
+            ? activation.studentsCount === 1
+              ? 'Primeiro aluno já cadastrado'
+              : formatChecklistCount(activation.studentsCount, 'aluno cadastrado', 'alunos cadastrados')
+            : undefined,
+        },
+        {
+          id: 'subscription',
+          title: 'Vincular plano ao aluno',
+          description: 'Associe um plano ao aluno para ativar matrícula e cobrança.',
+          done: activation.hasSubscription,
+          cta: 'Ver assinaturas',
+          href: '/assinaturas',
+          icon: icons.users,
+          statusLabel: activation.hasSubscription
+            ? activation.subscriptionsCount > 0
+              ? formatChecklistCount(activation.subscriptionsCount, 'matrícula com plano vinculado', 'matrículas com plano vinculado')
+              : 'Aluno com plano vinculado para cobrança'
+            : undefined,
+        },
+      ],
     },
     {
-      id: 'billing',
-      label: 'Cobrança configurada',
-      done: activation.hasBilling,
-      cta: 'Configurar Asaas',
-      href: '/settings/integrations',
-      icon: icons.creditCard,
-      emptyHint: 'Configure o Asaas para cobranças automáticas via PIX, boleto e cartão',
+      id: 'operation',
+      title: 'Validar operação real',
+      items: [
+        {
+          id: 'charge',
+          title: 'Gerar primeira cobrança',
+          description: 'Gere a primeira cobrança do aluno.',
+          done: activation.hasCharge,
+          cta: 'Ir para Financeiro',
+          href: '/financial',
+          icon: icons.money,
+          statusLabel: activation.hasCharge
+            ? activation.chargesCount > 0
+              ? formatChecklistCount(activation.chargesCount, 'cobrança gerada', 'cobranças geradas')
+              : 'Primeira cobrança já registrada'
+            : undefined,
+        },
+        {
+          id: 'payment',
+          title: 'Receber primeiro pagamento',
+          description: 'Confirme o primeiro pagamento recebido.',
+          done: activation.hasPayment,
+          cta: 'Ir para Financeiro',
+          href: '/financial',
+          icon: icons.creditCard,
+          statusLabel: activation.hasPayment
+            ? activation.paymentsCount === 1
+              ? 'Primeiro pagamento já confirmado'
+              : formatChecklistCount(activation.paymentsCount, 'pagamento recebido', 'pagamentos recebidos')
+            : undefined,
+        },
+        {
+          id: 'checkin',
+          title: 'Realizar primeiro check-in',
+          description: 'Faça um check-in assistido para validar o controle de acesso.',
+          done: activation.hasCheckin,
+          cta: 'Ir para Access',
+          href: '/access',
+          icon: icons.scan,
+          statusLabel: activation.hasCheckin
+            ? activation.checkinsCount === 1
+              ? 'Primeiro check-in já validado'
+              : formatChecklistCount(activation.checkinsCount, 'check-in realizado', 'check-ins realizados')
+            : undefined,
+        },
+      ],
     },
     {
-      id: 'plan',
-      label: activation.hasPlan
-        ? `${activation.plansCount} plano(s) ativo(s)`
-        : 'Primeiro plano criado',
-      done: activation.hasPlan,
-      cta: 'Criar plano',
-      href: '/plans/new',
-      icon: icons.calendar,
-      emptyHint: 'Crie seu primeiro plano para começar a matricular alunos',
-    },
-    {
-      id: 'contract',
-      label: activation.hasPublishedContract
-        ? `${activation.contractsCount} contrato(s) publicado(s)`
-        : 'Contrato publicado',
-      done: activation.hasPublishedContract,
-      cta: 'Criar contrato',
-      href: '/contracts',
-      icon: icons.document,
-      emptyHint: 'Publique um modelo de contrato para formalizar matrículas',
-    },
-    {
-      id: 'student',
-      label: activation.hasStudent
-        ? `${activation.studentsCount} aluno(s) cadastrado(s)`
-        : 'Primeiro aluno cadastrado',
-      done: activation.hasStudent,
-      cta: 'Cadastrar aluno',
-      href: '/users/onboarding',
-      icon: icons.userPlus,
-      emptyHint: 'Cadastre ou convide seu primeiro aluno para começar a operar',
-    },
-    {
-      id: 'checkin',
-      label: activation.hasCheckin
-        ? `${activation.checkinsCount} check-in(s) realizado(s)`
-        : 'Primeiro check-in realizado',
-      done: activation.hasCheckin,
-      cta: 'Ir para Access',
-      href: '/access',
-      icon: icons.scan,
-      emptyHint: 'Realize o primeiro check-in para validar o controle de acesso',
-    },
-    {
-      id: 'payment',
-      label: activation.hasPayment
-        ? `${activation.paymentsCount} pagamento(s) recebido(s)`
-        : 'Primeiro pagamento recebido',
-      done: activation.hasPayment,
-      cta: 'Ir para Financeiro',
-      href: '/financial',
-      icon: icons.money,
-      emptyHint: 'Registre ou receba o primeiro pagamento da academia',
+      id: 'command-center',
+      title: 'Acompanhar no command center',
+      items: [
+        {
+          id: 'command-center-case',
+          title: 'Ver caso no command center',
+          description: 'Acompanhe cobrança, status e operação em um só lugar.',
+          done: activation.hasCommandCenterCase,
+          cta: 'Abrir Command Center',
+          href: '/financial',
+          icon: icons.activity,
+          statusLabel: activation.hasCommandCenterCase
+            ? activation.commandCenterCaseCount === 1
+              ? '1 caso pronto para acompanhamento'
+              : formatChecklistCount(activation.commandCenterCaseCount, 'caso pronto para acompanhamento', 'casos prontos para acompanhamento')
+            : undefined,
+        },
+      ],
     },
   ];
 }
 
 function getProgressMessage(pct: number): string {
-  if (pct === 100) return 'Academia pronta para operar!';
-  if (pct >= 80) return 'Quase lá! Faltam poucos passos.';
-  if (pct >= 50) return 'Bom progresso! Continue configurando.';
-  if (pct >= 25) return 'Você está começando. Siga os passos abaixo.';
-  return 'Vamos configurar sua academia. Siga os passos abaixo.';
+  if (pct === 100) return 'Primeiro ciclo operacional validado com aluno, cobrança, pagamento e acesso.';
+  if (pct >= 80) return 'Falta pouco para fechar o primeiro ciclo da academia.';
+  if (pct >= 50) return 'A academia já saiu do setup e está entrando na operação real.';
+  if (pct >= 25) return 'Siga o trilho abaixo para chegar à primeira matrícula e cobrança.';
+  return 'Organize a operação inicial para matricular, cobrar e validar o acesso do primeiro aluno.';
 }
 
 function ActivationChecklistCard({
@@ -275,10 +352,10 @@ function ActivationChecklistCard({
   collapsed: boolean;
   onToggle: () => void;
 }) {
-  const items = getChecklistItems(activation);
-  // Account creation + setup always done if we reach here
-  const doneCount = items.filter((i) => i.done).length + 1; // +1 for "Conta criada"
-  const totalCount = items.length + 1;
+  const sections = getChecklistSections(activation);
+  const items = sections.flatMap((section) => section.items);
+  const doneCount = items.filter((item) => item.done).length;
+  const totalCount = items.length;
   const pct = Math.round((doneCount / totalCount) * 100);
   const allDone = pct === 100;
 
@@ -289,8 +366,8 @@ function ActivationChecklistCard({
         <div className="flex items-center justify-between mb-1">
           <h2 className="text-lg font-bold text-[var(--element-primary)]">
             {allDone
-              ? 'Sua academia está pronta!'
-              : `Sua academia está ${pct}% pronta`}
+              ? 'Trilho de implantação concluído'
+              : `Trilho de implantação da academia · ${pct}%`}
           </h2>
           {allDone && (
             <button
@@ -302,7 +379,9 @@ function ActivationChecklistCard({
           )}
         </div>
         <p className="text-sm text-[var(--element-secondary)] mb-4">
-          {getProgressMessage(pct)}
+          {allDone
+            ? 'Sua academia já conseguiu passar pelo trilho essencial para operar com o primeiro aluno.'
+            : getProgressMessage(pct)}
         </p>
 
         {/* Progress bar */}
@@ -323,74 +402,156 @@ function ActivationChecklistCard({
         <p className="text-xs text-[var(--element-secondary)] mt-2">
           {doneCount} de {totalCount} passos concluídos
         </p>
+
+        <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-[var(--divider-primary)] bg-[var(--background-secondary)] px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--element-secondary)]">
+              Estrutura da academia
+            </p>
+            <p className="text-xs text-[var(--element-primary)] mt-1">
+              {activation.hasUnit
+                ? 'Unidade principal pronta para o primeiro check-in.'
+                : 'Revise a unidade principal antes de validar o primeiro check-in.'}
+            </p>
+          </div>
+          <Link href="/settings/units" className="flex-shrink-0">
+            <Button variant="ghost" size="sm" className="text-xs">
+              Ver unidades
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Items */}
       {!collapsed && (
         <div className="border-t border-[var(--divider-primary)]">
-          {/* Account created — always done */}
-          <div className="flex items-center gap-3 px-6 py-3 border-b border-[var(--divider-primary)] bg-[var(--background-secondary)]">
-            <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 bg-[var(--status-positive)] text-white">
-              {icons.check}
-            </div>
-            <span className="text-sm font-medium text-[var(--element-secondary)] line-through">
-              Conta criada
-            </span>
-          </div>
-
-          {items.map((item) => (
+          {sections.map((section, sectionIndex) => (
             <div
-              key={item.id}
-              className="flex items-center gap-3 px-6 py-3 border-b border-[var(--divider-primary)] last:border-b-0 hover:bg-[var(--background-secondary)] transition-colors"
+              key={section.id}
+              className={sectionIndex > 0 ? 'border-t border-[var(--divider-primary)]' : ''}
             >
-              {/* Status icon */}
-              <div
-                className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0"
-                style={{
-                  backgroundColor: item.done
-                    ? 'var(--status-positive)'
-                    : 'var(--background-tertiary)',
-                  color: item.done
-                    ? 'white'
-                    : 'var(--element-disabled)',
-                }}
-              >
-                {item.done ? icons.check : (
-                  <span className="w-2 h-2 rounded-full bg-current" />
-                )}
+              <div className="px-6 py-3 bg-[var(--background-secondary)]">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--element-secondary)]">
+                  {section.title}
+                </h3>
               </div>
 
-              {/* Label */}
-              <div className="flex-1 min-w-0">
-                <span
-                  className={`text-sm font-medium ${
-                    item.done
-                      ? 'text-[var(--element-secondary)] line-through'
-                      : 'text-[var(--element-primary)]'
-                  }`}
+              {section.items.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-start gap-3 px-6 py-3.5 border-t border-[var(--divider-primary)] hover:bg-[var(--background-secondary)] transition-colors"
                 >
-                  {item.label}
-                </span>
-                {!item.done && (
-                  <p className="text-xs text-[var(--element-secondary)] mt-0.5">
-                    {item.emptyHint}
-                  </p>
-                )}
-              </div>
+                  <div
+                    className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5"
+                    style={{
+                      backgroundColor: item.done
+                        ? 'var(--status-positive)'
+                        : 'var(--background-tertiary)',
+                      color: item.done
+                        ? 'white'
+                        : 'var(--element-disabled)',
+                    }}
+                  >
+                    {item.done ? icons.check : (
+                      <span className="w-2 h-2 rounded-full bg-current" />
+                    )}
+                  </div>
 
-              {/* CTA */}
-              {!item.done && (
-                <Link href={item.href} className="flex-shrink-0">
-                  <Button variant="outline" size="sm" className="text-xs gap-1.5">
-                    {item.cta}
-                    {icons.arrowRight}
-                  </Button>
-                </Link>
-              )}
+                  <div className="flex-1 min-w-0">
+                    <span
+                      className={`text-sm font-medium ${
+                        item.done
+                          ? 'text-[var(--element-secondary)]'
+                          : 'text-[var(--element-primary)]'
+                      }`}
+                    >
+                      {item.title}
+                    </span>
+                    <p className={`text-xs mt-0.5 ${item.done ? 'text-[var(--status-positive)]' : 'text-[var(--element-secondary)]'}`}>
+                      {item.done ? item.statusLabel || item.description : item.description}
+                    </p>
+                  </div>
+
+                  <Link href={item.href} className="flex-shrink-0">
+                    <Button variant={item.done ? 'ghost' : 'outline'} size="sm" className="text-xs gap-1.5">
+                      {item.cta}
+                      {icons.arrowRight}
+                    </Button>
+                  </Link>
+                </div>
+              ))}
             </div>
           ))}
         </div>
       )}
+    </Card>
+  );
+}
+
+function ReadyToOperateCard({
+  activation,
+  showImplantationDetails,
+  onToggleImplantationDetails,
+}: {
+  activation: ActivationChecklist;
+  showImplantationDetails: boolean;
+  onToggleImplantationDetails: () => void;
+}) {
+  return (
+    <Card className="border border-[var(--divider-primary)] overflow-hidden">
+      <div className="p-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <div className="inline-flex items-center gap-2 rounded-full bg-[var(--status-positive-background)] px-3 py-1 text-xs font-semibold text-[var(--status-positive)]">
+              {icons.checkCircle}
+              Academia pronta para operar
+            </div>
+            <h2 className="mt-3 text-lg font-bold text-[var(--element-primary)]">
+              A implantação principal foi concluída.
+            </h2>
+            <p className="mt-1 text-sm text-[var(--element-secondary)]">
+              Sua academia já passou por plano, contrato, matrícula, cobrança, pagamento, check-in e command center. Agora o foco é operar.
+            </p>
+            <p className="mt-3 text-xs text-[var(--element-secondary)]">
+              {`${activation.studentsCount} aluno(s), ${activation.chargesCount} cobrança(s), ${activation.paymentsCount} pagamento(s), ${activation.checkinsCount} check-in(s) e ${activation.commandCenterCaseCount} caso(s) no command center.`}
+            </p>
+          </div>
+
+          <button
+            onClick={onToggleImplantationDetails}
+            className="text-xs text-[var(--element-secondary)] hover:text-[var(--element-primary)] transition-colors lg:self-start"
+          >
+            {showImplantationDetails ? 'Ocultar implantação' : 'Ver implantação'}
+          </button>
+        </div>
+
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Link href="/users/onboarding">
+            <Button className="gap-2">
+              {icons.userPlus}
+              Cadastrar aluno
+            </Button>
+          </Link>
+          <Link href="/financial">
+            <Button variant="outline" className="gap-2">
+              {icons.money}
+              Ir para Financeiro
+            </Button>
+          </Link>
+          <Link href="/access">
+            <Button variant="outline" className="gap-2">
+              {icons.scan}
+              Ir para Access
+            </Button>
+          </Link>
+          <Link href="/financial">
+            <Button variant="outline" className="gap-2">
+              {icons.activity}
+              Abrir Command Center
+            </Button>
+          </Link>
+        </div>
+      </div>
     </Card>
   );
 }
@@ -657,9 +818,8 @@ function getGreeting(): string {
 }
 
 function isAcademyMature(activation: ActivationChecklist): boolean {
-  const items = getChecklistItems(activation);
-  const done = items.filter((i) => i.done).length + 1; // +1 for account
-  return done >= items.length + 1; // all done
+  const items = getChecklistSections(activation).flatMap((section) => section.items);
+  return items.every((item) => item.done);
 }
 
 // ============================================================================
@@ -669,7 +829,7 @@ function isAcademyMature(activation: ActivationChecklist): boolean {
 export default function HomePage() {
   const { logout } = useAuth();
   const [homeData, setHomeData] = useState<HomeData | null>(null);
-  const [checklistCollapsed, setChecklistCollapsed] = useState(false);
+  const [showCompletedChecklistDetails, setShowCompletedChecklistDetails] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -678,10 +838,6 @@ export default function HomePage() {
       if (mounted) {
         setHomeData(data);
         capture('home_viewed', { academy_mature: isAcademyMature(data.activation) });
-        // Auto-collapse if academy is fully activated
-        if (isAcademyMature(data.activation)) {
-          setChecklistCollapsed(true);
-        }
       }
     };
     void load();
@@ -745,11 +901,17 @@ export default function HomePage() {
           </div>
 
           {/* ACTIVATION CHECKLIST — Primary for new academies */}
-          {!mature && (
+          {mature ? (
+            <ReadyToOperateCard
+              activation={homeData.activation}
+              showImplantationDetails={showCompletedChecklistDetails}
+              onToggleImplantationDetails={() => setShowCompletedChecklistDetails(!showCompletedChecklistDetails)}
+            />
+          ) : (
             <ActivationChecklistCard
               activation={homeData.activation}
-              collapsed={checklistCollapsed}
-              onToggle={() => setChecklistCollapsed(!checklistCollapsed)}
+              collapsed={false}
+              onToggle={() => undefined}
             />
           )}
 
@@ -843,11 +1005,11 @@ export default function HomePage() {
               href="/settings/units"
             />
             <KpiCard
-              label="Planos ativos"
+              label="Planos para matrícula"
               value={homeData.activation.plansCount}
               context={
                 homeData.activation.plansCount > 0
-                  ? 'Disponíveis para matrícula'
+                  ? 'Prontos para vincular alunos'
                   : 'Crie um plano para começar'
               }
               icon={icons.calendar}
@@ -869,12 +1031,12 @@ export default function HomePage() {
             <QuickActions actions={homeData.quickActions} />
           </div>
 
-          {/* MATURE ACADEMY — Collapsed checklist reminder */}
-          {mature && (
+          {/* MATURE ACADEMY — Optional implantation detail */}
+          {mature && showCompletedChecklistDetails && (
             <ActivationChecklistCard
               activation={homeData.activation}
-              collapsed={checklistCollapsed}
-              onToggle={() => setChecklistCollapsed(!checklistCollapsed)}
+              collapsed={false}
+              onToggle={() => setShowCompletedChecklistDetails(false)}
             />
           )}
           

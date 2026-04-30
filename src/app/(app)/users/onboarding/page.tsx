@@ -25,9 +25,19 @@ import {
   OnboardingStep,
   updateDraftSession,
 } from '@/lib/users';
-import { activateExternalBilling } from '@/lib/users/onboardingService';
+import { getPaymentById } from '@/lib/payments/paymentServiceSupabase';
+import { generateStudentPortalAccessLink } from '@/lib/students/studentPortalAccessService';
+import {
+  activateExternalBilling,
+  reconcileExternalCharge,
+  type ExternalBillingResult,
+} from '@/lib/users/onboardingService';
 import { capture } from '@/lib/analytics';
-import type { ActivationOutcome } from '@/components/onboarding/steps/StepActivation';
+import type {
+  ActivationOutcome,
+  ActivationPaymentSummary,
+  StudentAccessSummary,
+} from '@/components/onboarding/steps/StepActivation';
 
 // ============================================
 // ICONS
@@ -47,6 +57,102 @@ function PauseIcon({ className }: { className?: string }) {
       <path strokeLinecap="round" strokeLinejoin="round" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   );
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function loadActivationPaymentSummary(
+  paymentId: string,
+  billing?: ExternalBillingResult,
+): Promise<ActivationPaymentSummary | undefined> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const payment = await getPaymentById(paymentId);
+
+    if (payment) {
+      return {
+        id: payment.id,
+        amount: payment.amount,
+        currency: payment.currency,
+        status: payment.status,
+        method: payment.method,
+        dueDate: payment.dueDate,
+        invoiceUrl: payment.invoiceUrl ?? billing?.invoiceUrl ?? null,
+        bankSlipUrl: payment.bankSlipUrl ?? billing?.bankSlipUrl ?? null,
+        asaasStatus: payment.asaasStatus,
+      };
+    }
+
+    if (attempt < 2) {
+      await wait(250);
+    }
+  }
+
+  return undefined;
+}
+
+async function buildStudentAccessSummary(
+  currentSession: OnboardingSession,
+  finalizeResult: { email?: string; full_name?: string },
+): Promise<StudentAccessSummary> {
+  const email = finalizeResult.email?.trim().toLowerCase() || currentSession.collectedData.identification?.email?.trim().toLowerCase();
+
+  if (!email) {
+    return {
+      email: null,
+      error: 'Cadastro concluído sem um e-mail válido para enviar o acesso do aluno.',
+    };
+  }
+
+  const accessResult = await generateStudentPortalAccessLink({
+    unitId: currentSession.unitId,
+    email,
+    recipientName: finalizeResult.full_name || currentSession.collectedData.identification?.fullName || null,
+    description: 'Acesso ao portal do aluno gerado no onboarding',
+    expirationDays: 7,
+  });
+
+  if (!accessResult.success || !accessResult.setupUrl) {
+    return {
+      email,
+      error: accessResult.error || 'Não foi possível gerar o link seguro do portal do aluno.',
+    };
+  }
+
+  return {
+    email,
+    setupUrl: accessResult.setupUrl,
+  };
+}
+
+async function refreshActivationBilling(
+  subscriptionId: string,
+  paymentId: string,
+  chargeId?: string | null,
+): Promise<{
+  billing?: ExternalBillingResult;
+  payment?: ActivationPaymentSummary;
+  error?: string;
+}> {
+  const billing = await activateExternalBilling(subscriptionId, paymentId);
+  const chargeIdToSync = billing.asaasChargeId ?? chargeId ?? null;
+  let error: string | undefined;
+
+  if (chargeIdToSync) {
+    const reconcileResult = await reconcileExternalCharge(chargeIdToSync);
+    if (!reconcileResult.success) {
+      error = reconcileResult.error || 'Não foi possível sincronizar a cobrança com o Asaas.';
+    }
+  }
+
+  const payment = await loadActivationPaymentSummary(paymentId, billing);
+
+  return {
+    billing,
+    payment,
+    error,
+  };
 }
 
 // ============================================
@@ -302,7 +408,32 @@ export default function OnboardingPage() {
                 );
               }
 
-              return { localSuccess: true, billing };
+              const payment = result.activation?.payment_id
+                ? await loadActivationPaymentSummary(result.activation.payment_id, billing)
+                : undefined;
+
+              const studentAccess = await buildStudentAccessSummary(session, result);
+
+              return {
+                localSuccess: true,
+                billing,
+                payment,
+                studentAccess,
+                activation: {
+                  studentId: result.user_id,
+                  subscriptionId: result.activation?.subscription_id,
+                  paymentId: result.activation?.payment_id,
+                },
+              };
+            }}
+            onRetryBilling={async ({ subscriptionId, paymentId, chargeId }) => {
+              return refreshActivationBilling(subscriptionId, paymentId, chargeId);
+            }}
+            onRetryStudentAccess={async () => {
+              return buildStudentAccessSummary(session, {
+                email: session.collectedData.identification?.email,
+                full_name: session.collectedData.identification?.fullName,
+              });
             }}
             onBack={goToPreviousStep}
             onFinish={() => router.push('/users')}
@@ -383,8 +514,8 @@ export default function OnboardingPage() {
           </aside>
 
           {/* Form content */}
-          <div className="md:col-span-3">
-            <Card className="p-6 md:p-8">
+          <div className="min-w-0 md:col-span-3">
+            <Card className="min-w-0 p-6 md:p-8">
               {renderCurrentStep()}
             </Card>
           </div>

@@ -158,6 +158,25 @@ export interface AsaasPaymentResponse {
   postalService: boolean;
 }
 
+export interface AsaasPixQrCodeResponse {
+  encodedImage: string | null;
+  payload: string | null;
+  expirationDate: string | null;
+  description: string | null;
+}
+
+export interface AsaasBankSlipBillingInfoResponse {
+  identificationField: string | null;
+  nossoNumero: string | null;
+  barCode: string | null;
+  bankSlipUrl: string | null;
+}
+
+export interface AsaasPaymentBillingInfoResponse {
+  pix?: AsaasPixQrCodeResponse | null;
+  bankSlip?: AsaasBankSlipBillingInfoResponse | null;
+}
+
 // ─── Subscription: Cycle / Status ────────────────────────────────
 
 export type AsaasSubscriptionCycle =

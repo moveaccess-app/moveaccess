@@ -1,4 +1,4 @@
-import { getActiveAcademyId } from '@/lib/supabase/academyScope';
+import { getActiveAcademyId, getBrowserAccessToken } from '@/lib/supabase/academyScope';
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -35,23 +35,11 @@ interface DbRow {
 const API_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const API_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-function getAccessToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  const projectRef = API_URL?.split('//')[1]?.split('.')[0] || 'supabase';
-  const stored = localStorage.getItem(`sb-${projectRef}-auth-token`);
-  if (!stored) return null;
-  try {
-    return JSON.parse(stored).access_token || null;
-  } catch {
-    return null;
-  }
-}
-
 async function fetchSupabase<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<{ data: T | null; error: string | null }> {
-  const token = getAccessToken();
+  const token = await getBrowserAccessToken();
   if (!token || !API_URL || !API_KEY) {
     return { data: null, error: 'Não autenticado' };
   }

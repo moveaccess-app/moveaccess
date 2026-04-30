@@ -9,7 +9,7 @@ export { Card, CardHeader, CardFooter, CardTitle, CardDescription, CardContent }
 export { Container } from "./Container";
 export { EmptyState } from "./EmptyState";
 export { IconButton } from "./IconButton";
-export { Input } from "./Input";
+export { Input, darkSurfaceInputClassName } from "./Input";
 export { Label } from "./Label";
 export { Logo } from "./Logo";
 export { Select } from "./Select";

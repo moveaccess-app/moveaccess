@@ -46,7 +46,7 @@ export function LandingHeader() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16 lg:h-20">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5 shrink-0">
+          <Link href="/" className="flex items-center gap-2.5 shrink-0 text-white no-underline hover:text-white hover:no-underline">
             <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-emerald-400 flex items-center justify-center shadow-lg shadow-cyan-500/20">
               <span className="text-sm font-bold text-gray-950">M</span>
             </div>
@@ -72,14 +72,14 @@ export function LandingHeader() {
           <div className="hidden md:flex items-center gap-4">
             <Link
               href="/login"
-              className="text-sm text-slate-400 hover:text-white transition-colors"
+              className="text-sm text-slate-400 no-underline transition-colors hover:text-white hover:no-underline"
             >
               Entrar
             </Link>
             <Link
               href="/signup"
               onClick={() => capture('cta_clicked', { location: 'navbar', button_text: 'Começar agora' })}
-              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20 hover:shadow-xl hover:shadow-cyan-500/30 hover:-translate-y-0.5 transition-all"
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 text-sm font-semibold text-white no-underline shadow-lg shadow-cyan-500/20 transition-all hover:-translate-y-0.5 hover:text-white hover:no-underline hover:shadow-xl hover:shadow-cyan-500/30"
             >
               Começar agora
             </Link>
@@ -118,14 +118,14 @@ export function LandingHeader() {
               <div className="pt-3 px-3 flex flex-col gap-2">
                 <Link
                   href="/login"
-                  className="text-sm text-slate-400 hover:text-white py-2"
+                  className="text-sm text-slate-400 py-2 no-underline hover:text-white hover:no-underline"
                 >
                   Entrar
                 </Link>
                 <Link
                   href="/signup"
                   onClick={() => capture('cta_clicked', { location: 'navbar', button_text: 'Começar agora' })}
-                  className="block text-center px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 text-sm font-semibold text-white"
+                  className="block text-center px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 text-sm font-semibold text-white no-underline hover:text-white hover:no-underline"
                 >
                   Começar agora
                 </Link>

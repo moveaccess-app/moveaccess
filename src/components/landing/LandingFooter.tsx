@@ -28,7 +28,7 @@ export function LandingFooter() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 lg:gap-12">
           {/* Brand */}
           <div className="md:col-span-2">
-            <Link href="/" className="flex items-center gap-2.5 mb-4">
+            <Link href="/" className="mb-4 flex items-center gap-2.5 text-white no-underline hover:text-white hover:no-underline">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-emerald-400 flex items-center justify-center">
                 <span className="text-sm font-bold text-gray-950">M</span>
               </div>
@@ -50,7 +50,7 @@ export function LandingFooter() {
                   <li key={link.label}>
                     <a
                       href={link.href}
-                      className="text-sm text-slate-500 hover:text-slate-300 transition-colors"
+                      className="text-sm text-slate-500 no-underline transition-colors hover:text-slate-300 hover:no-underline"
                     >
                       {link.label}
                     </a>

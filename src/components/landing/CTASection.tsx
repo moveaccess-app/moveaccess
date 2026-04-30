@@ -45,7 +45,7 @@ export function CTASection() {
             <Link
               href="/signup"
               onClick={() => capture('cta_clicked', { location: 'final', button_text: 'Criar minha academia' })}
-              className="inline-flex items-center justify-center px-8 py-4 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 text-base font-semibold text-white shadow-xl shadow-cyan-500/25 hover:shadow-2xl hover:shadow-cyan-500/30 hover:-translate-y-0.5 transition-all"
+              className="inline-flex items-center justify-center px-8 py-4 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 text-base font-semibold text-white no-underline shadow-xl shadow-cyan-500/25 transition-all hover:-translate-y-0.5 hover:text-white hover:no-underline hover:shadow-2xl hover:shadow-cyan-500/30"
             >
               Criar minha academia
               <svg className="w-5 h-5 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -54,7 +54,7 @@ export function CTASection() {
             </Link>
             <Link
               href="/login"
-              className="inline-flex items-center justify-center px-6 py-4 rounded-xl border border-slate-700 text-sm font-medium text-slate-300 hover:bg-slate-800/50 hover:border-slate-600 transition-all"
+              className="inline-flex items-center justify-center px-6 py-4 rounded-xl border border-slate-700 text-sm font-medium text-slate-300 no-underline transition-all hover:border-slate-600 hover:bg-slate-800/50 hover:text-white hover:no-underline"
             >
               Já tenho conta
             </Link>

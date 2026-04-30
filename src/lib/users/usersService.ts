@@ -15,7 +15,8 @@ import type {
 } from './types';
 
 // Feature flag
-const USE_SUPABASE = process.env.NEXT_PUBLIC_USE_SUPABASE_USERS === 'true';
+// Pilot mode should prefer the real Users source unless the workspace explicitly forces mocks.
+const USE_SUPABASE = process.env.NEXT_PUBLIC_USE_SUPABASE_USERS !== 'false';
 
 export type * from './types';
 
@@ -157,6 +158,13 @@ export function formatCurrency(value: number): string {
 
 function adaptSupabaseToMock(user: supabaseService.User): MockUser {
   const now = new Date().toISOString();
+  const isAccessReleased = user.operationalStatus.access.code === 'released';
+  const mappedFinancialStatus = user.operationalStatus.financial.code === 'current'
+    ? 'up_to_date'
+    : user.operationalStatus.financial.code === 'pending_payment'
+      || user.operationalStatus.financial.code === 'no_charge'
+      ? 'partial'
+      : 'overdue';
   
   return {
     id: user.id,
@@ -183,12 +191,12 @@ function adaptSupabaseToMock(user: supabaseService.User): MockUser {
     
     // Access: valores default (TODO: implementar módulo Access)
     access: {
-      isAllowed: user.status === 'active',
+      isAllowed: isAccessReleased,
       lastCheckIn: null,
       checkInsLast7Days: 0,
       checkInsLast30Days: 0,
       digitalCard: {
-        status: user.status === 'active' ? 'generated' : 'pending',
+        status: isAccessReleased ? 'generated' : 'pending',
         generatedAt: user.createdAt,
       },
     },
@@ -201,8 +209,8 @@ function adaptSupabaseToMock(user: supabaseService.User): MockUser {
       endDate: user.currentPlan.expiresAt || now,
       billingType: 'monthly',
       autoRenewal: true,
-      nextDueDate: user.currentPlan.expiresAt || now,
-      currentValue: 0,
+      nextDueDate: user.billingSnapshot?.dueDate || user.currentPlan.expiresAt || now,
+      currentValue: user.billingSnapshot?.amount || 0,
     } : null,
     
     // Contratos: valores default (TODO: implementar módulo Contracts)
@@ -211,12 +219,18 @@ function adaptSupabaseToMock(user: supabaseService.User): MockUser {
     
     // Financeiro: valores default (TODO: implementar módulo Financial)
     financial: {
-      status: 'up_to_date',
-      daysOverdue: 0,
-      lastPayment: null,
+      status: mappedFinancialStatus,
+      daysOverdue: user.operationalStatus.financial.code === 'delinquent' ? 1 : 0,
+      lastPayment: user.billingSnapshot?.paidAt ? {
+        id: user.billingSnapshot.id,
+        date: user.billingSnapshot.paidAt,
+        value: user.billingSnapshot.amount,
+        method: user.billingSnapshot.method === 'card' ? 'credit_card' : user.billingSnapshot.method,
+        description: 'Pagamento consolidado no financeiro real',
+      } : null,
       pendingBalance: 0,
-      nextDueDate: now,
-      nextDueValue: 0,
+      nextDueDate: user.billingSnapshot?.dueDate || now,
+      nextDueValue: user.billingSnapshot?.amount || 0,
     },
     
     // Documentos: valores default (TODO: implementar módulo Documents)

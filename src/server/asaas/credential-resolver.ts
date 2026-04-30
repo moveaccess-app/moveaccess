@@ -12,6 +12,11 @@ class EnvAsaasCredentialResolver implements IAsaasCredentialResolver {
   async resolve(apiKeyReference: string): Promise<string> {
     const value = process.env[apiKeyReference];
     if (!value) {
+      const literalApiKey = apiKeyReference.trim();
+      if (literalApiKey.startsWith('$aact_') || literalApiKey.startsWith('aact_')) {
+        return literalApiKey;
+      }
+
       throw new Error(
         `Credencial Asaas não encontrada para referência "${apiKeyReference}". ` +
         `Verifique se a variável de ambiente está configurada no servidor.`

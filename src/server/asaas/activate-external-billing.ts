@@ -30,6 +30,7 @@ import type {
   AsaasPaymentStatus,
   AsaasSubscriptionStatus,
   AsaasCustomerCreateRequest,
+  AsaasPaymentBillingInfoResponse,
 } from './types';
 
 // ─── Result types ────────────────────────────────────────────────
@@ -53,8 +54,15 @@ export interface ActivateExternalBillingResult {
   asaasSubscriptionId?: string;
   asaasChargeId?: string;
   asaasPaymentId?: string;
+  paymentLink?: string | null;
   invoiceUrl?: string | null;
   bankSlipUrl?: string | null;
+  bankSlipIdentificationField?: string | null;
+  bankSlipBarCode?: string | null;
+  bankSlipNossoNumero?: string | null;
+  pixCopyPaste?: string | null;
+  pixQrCodeImage?: string | null;
+  pixQrCodeExpirationDate?: string | null;
   environment?: AsaasEnvironment;
 }
 
@@ -118,6 +126,8 @@ const LOCAL_CYCLE_TO_ASAAS: Record<string, AsaasSubscriptionCycle> = {
   monthly: 'MONTHLY',
   yearly: 'YEARLY',
 };
+
+const BILLING_TIME_ZONE = 'America/Sao_Paulo';
 
 // ─── Decision matrix ─────────────────────────────────────────────
 
@@ -255,7 +265,7 @@ async function ensureCustomerSynced(input: {
   environment: AsaasEnvironment;
   client: AsaasClient;
 }): Promise<CustomerLink> {
-  const { student, academyId, accountId, environment, client } = input;
+  const { student, academyId, accountId, client } = input;
   const supabase = createAdminSupabaseClient();
 
   // Check existing link
@@ -378,12 +388,13 @@ async function findExistingChargeLink(paymentId: string) {
 
   const { data } = await supabase
     .from('asaas_charges')
-    .select('id, asaas_payment_id, asaas_status, billing_type, invoice_url, bank_slip_url, environment')
+    .select('id, asaas_account_id, asaas_payment_id, asaas_status, billing_type, invoice_url, bank_slip_url, environment')
     .eq('payment_id', paymentId)
     .maybeSingle();
 
   return data as {
     id: string;
+    asaas_account_id: string;
     asaas_payment_id: string;
     asaas_status: string;
     billing_type: string;
@@ -391,6 +402,29 @@ async function findExistingChargeLink(paymentId: string) {
     bank_slip_url: string | null;
     environment: string;
   } | null;
+}
+
+async function buildAsaasClientForAccount(
+  accountId: string,
+  environment: AsaasEnvironment,
+): Promise<AsaasClient | null> {
+  const supabase = createAdminSupabaseClient();
+  const { data, error } = await supabase
+    .from('asaas_accounts')
+    .select('api_key_reference')
+    .eq('id', accountId)
+    .maybeSingle();
+
+  if (error || !data?.api_key_reference) {
+    return null;
+  }
+
+  try {
+    const apiKey = await getCredentialResolver().resolve(data.api_key_reference);
+    return new AsaasClient(apiKey, environment);
+  } catch {
+    return null;
+  }
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────
@@ -407,15 +441,84 @@ function buildChargeExternalReference(paymentId: string, academyId: string): str
   return `moveaccess:payment:${paymentId}:academy:${academyId}`;
 }
 
+function formatDateInBillingTimeZone(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: BILLING_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+
+  return `${year}-${month}-${day}`;
+}
+
 function formatDueDate(dateStr: string): string {
   const d = new Date(dateStr);
-  const now = new Date();
+  const today = formatDateInBillingTimeZone(new Date());
 
-  if (isNaN(d.getTime()) || d < now) {
-    return now.toISOString().split('T')[0];
+  if (isNaN(d.getTime())) {
+    return today;
   }
 
-  return d.toISOString().split('T')[0];
+  const dueDate = formatDateInBillingTimeZone(d);
+  return dueDate < today ? today : dueDate;
+}
+
+type ChargePresentation = Pick<ActivateExternalBillingResult,
+  | 'paymentLink'
+  | 'invoiceUrl'
+  | 'bankSlipUrl'
+  | 'bankSlipIdentificationField'
+  | 'bankSlipBarCode'
+  | 'bankSlipNossoNumero'
+  | 'pixCopyPaste'
+  | 'pixQrCodeImage'
+  | 'pixQrCodeExpirationDate'
+>;
+
+function mapBillingInfoToPresentation(
+  billingInfo: AsaasPaymentBillingInfoResponse,
+): ChargePresentation {
+  return {
+    bankSlipIdentificationField: billingInfo.bankSlip?.identificationField ?? null,
+    bankSlipBarCode: billingInfo.bankSlip?.barCode ?? null,
+    bankSlipNossoNumero: billingInfo.bankSlip?.nossoNumero ?? null,
+    bankSlipUrl: billingInfo.bankSlip?.bankSlipUrl ?? null,
+    pixCopyPaste: billingInfo.pix?.payload ?? null,
+    pixQrCodeImage: billingInfo.pix?.encodedImage ?? null,
+    pixQrCodeExpirationDate: billingInfo.pix?.expirationDate ?? null,
+  };
+}
+
+async function loadChargePresentation(
+  client: AsaasClient,
+  asaasPaymentId: string,
+): Promise<ChargePresentation> {
+  const presentation: ChargePresentation = {};
+
+  try {
+    const payment = await client.getPayment(asaasPaymentId);
+    presentation.paymentLink = payment.paymentLink ?? null;
+    presentation.invoiceUrl = payment.invoiceUrl ?? null;
+    presentation.bankSlipUrl = payment.bankSlipUrl ?? null;
+  } catch {
+    // Keep enrichment best-effort.
+  }
+
+  try {
+    Object.assign(
+      presentation,
+      mapBillingInfoToPresentation(await client.getPaymentBillingInfo(asaasPaymentId)),
+    );
+  } catch {
+    // Keep enrichment best-effort.
+  }
+
+  return presentation;
 }
 
 // ─── Persist helpers ─────────────────────────────────────────────
@@ -518,13 +621,14 @@ async function persistChargeLink(input: {
 
 async function createExternalSubscription(ctx: {
   subscription: LocalSubscription;
+  payment: LocalPayment;
   decision: BillingDecision;
   customerLink: CustomerLink;
   account: ResolvedAccount;
   environment: AsaasEnvironment;
   client: AsaasClient;
 }): Promise<ActivateExternalBillingResult> {
-  const { subscription, decision, customerLink, account, environment, client } = ctx;
+  const { subscription, payment, decision, customerLink, account, environment, client } = ctx;
 
   const externalRef = buildSubscriptionExternalReference(subscription.id, subscription.academy_id);
   const description = `MoveAccess — Assinatura ${subscription.id.slice(0, 8)}`;
@@ -533,7 +637,7 @@ async function createExternalSubscription(ctx: {
     customer: customerLink.asaasCustomerId,
     billingType: decision.billingType,
     value: subscription.price,
-    nextDueDate: formatDueDate(subscription.started_at),
+    nextDueDate: formatDueDate(payment.due_date),
     cycle: decision.asaasCycle!,
     description,
     externalReference: externalRef,
@@ -606,13 +710,22 @@ async function createExternalCharge(ctx: {
     bankSlipUrl: asaasPayment.bankSlipUrl ?? null,
   });
 
+  const presentation = await loadChargePresentation(client, asaasPayment.id);
+
   return {
     status: 'completed_with_billing',
     billingPath: 'charge',
     asaasChargeId: chargeId,
     asaasPaymentId: asaasPayment.id,
-    invoiceUrl: asaasPayment.invoiceUrl ?? null,
-    bankSlipUrl: asaasPayment.bankSlipUrl ?? null,
+    paymentLink: presentation.paymentLink ?? asaasPayment.paymentLink ?? null,
+    invoiceUrl: presentation.invoiceUrl ?? asaasPayment.invoiceUrl ?? null,
+    bankSlipUrl: presentation.bankSlipUrl ?? asaasPayment.bankSlipUrl ?? null,
+    bankSlipIdentificationField: presentation.bankSlipIdentificationField ?? null,
+    bankSlipBarCode: presentation.bankSlipBarCode ?? null,
+    bankSlipNossoNumero: presentation.bankSlipNossoNumero ?? null,
+    pixCopyPaste: presentation.pixCopyPaste ?? null,
+    pixQrCodeImage: presentation.pixQrCodeImage ?? null,
+    pixQrCodeExpirationDate: presentation.pixQrCodeExpirationDate ?? null,
     environment,
   };
 }
@@ -661,13 +774,45 @@ export async function activateExternalBilling(
   } else {
     const existing = await findExistingChargeLink(payment.id);
     if (existing) {
+      let presentation: ChargePresentation = {
+        paymentLink: null,
+        invoiceUrl: existing.invoice_url,
+        bankSlipUrl: existing.bank_slip_url,
+        bankSlipIdentificationField: null,
+        bankSlipBarCode: null,
+        bankSlipNossoNumero: null,
+        pixCopyPaste: null,
+        pixQrCodeImage: null,
+        pixQrCodeExpirationDate: null,
+      };
+
+      const client = await buildAsaasClientForAccount(
+        existing.asaas_account_id,
+        existing.environment as AsaasEnvironment,
+      );
+
+      if (client) {
+        const refreshedPresentation = await loadChargePresentation(client, existing.asaas_payment_id);
+        presentation = {
+          ...presentation,
+          ...refreshedPresentation,
+        };
+      }
+
       return {
         status: 'already_exists',
         billingPath: 'charge',
         asaasChargeId: existing.id,
         asaasPaymentId: existing.asaas_payment_id,
-        invoiceUrl: existing.invoice_url,
-        bankSlipUrl: existing.bank_slip_url,
+        paymentLink: presentation.paymentLink ?? null,
+        invoiceUrl: presentation.invoiceUrl ?? existing.invoice_url,
+        bankSlipUrl: presentation.bankSlipUrl ?? existing.bank_slip_url,
+        bankSlipIdentificationField: presentation.bankSlipIdentificationField ?? null,
+        bankSlipBarCode: presentation.bankSlipBarCode ?? null,
+        bankSlipNossoNumero: presentation.bankSlipNossoNumero ?? null,
+        pixCopyPaste: presentation.pixCopyPaste ?? null,
+        pixQrCodeImage: presentation.pixQrCodeImage ?? null,
+        pixQrCodeExpirationDate: presentation.pixQrCodeExpirationDate ?? null,
         environment: existing.environment as AsaasEnvironment,
       };
     }
@@ -735,6 +880,7 @@ export async function activateExternalBilling(
     if (decision.path === 'subscription') {
       return await createExternalSubscription({
         subscription,
+        payment,
         decision,
         customerLink,
         account,

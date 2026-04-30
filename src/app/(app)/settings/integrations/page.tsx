@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { startTransition, useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Header } from '@/components/common/Header';
 import { Card } from '@/components/ui/Card';
@@ -614,21 +614,36 @@ export default function IntegrationsPage() {
   const [disconnecting, setDisconnecting] = useState(false);
 
   const loadState = useCallback(async () => {
-    setLoading(true);
     const state = await getAsaasConnectionState();
     setConnectionState(state);
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    void loadState();
-  }, [loadState]);
+    let cancelled = false;
+
+    void getAsaasConnectionState().then((state) => {
+      if (cancelled) {
+        return;
+      }
+
+      startTransition(() => {
+        setConnectionState(state);
+        setLoading(false);
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleDisconnect = async () => {
     if (!connectionState?.account) return;
     if (!confirm('Deseja desconectar o Asaas? Cobranças ativas não serão canceladas.')) return;
 
     setDisconnecting(true);
+    setLoading(true);
     await disconnectAsaas(connectionState.account.id);
     setDisconnecting(false);
     setMode('view');
@@ -637,6 +652,7 @@ export default function IntegrationsPage() {
 
   const handleSaved = async () => {
     setMode('view');
+    setLoading(true);
     await loadState();
   };
 
